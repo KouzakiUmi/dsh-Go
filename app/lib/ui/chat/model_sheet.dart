@@ -438,6 +438,12 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
   /// The channel being browsed; null follows the selected model's.
   String? _channel;
 
+  /// Whether the channel dropdown is expanded.
+  bool _channelExpanded = false;
+
+  /// Search query for filtering models.
+  String _searchQuery = '';
+
   /// Closes the sheet once the effort thumb has landed.
   Timer? _close;
 
@@ -538,7 +544,8 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            SheetTitleBar(catalog == null ? l10n.viewModelSelect : readListHeading(l10n.viewModelSelect, view.status)),
+            if (!picking)
+              SheetTitleBar(catalog == null ? l10n.viewModelSelect : readListHeading(l10n.viewModelSelect, view.status)),
             body,
             if (picking && widget.confirmSelection && !isValidModelSelection(catalog, _selection))
               Padding(
@@ -577,83 +584,142 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
     final shownId = _channel ?? selected?.provider;
     final shown = groups.firstWhere((g) => g.id == shownId, orElse: () => groups.first);
     final efforts = selected?.efforts ?? const <ReasoningEffort>[];
-    final quick = AppMotion.of(context, AppMotion.quick);
     const inset = SheetTitleBar.inset;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (groups.length > 1)
-          Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 16),
-            child: _ChannelBar(groups: groups, shown: shown.id, onChanged: (id) => setState(() => _channel = id)),
-          )
-        else
-          SheetSectionLabel(shown.name),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: inset),
-          child: SmoothSize(
-            duration: AppMotion.of(context, AppMotion.standard),
-            curve: AppMotion.std,
-            alignment: Alignment.topCenter,
-            child: AnimatedSwitcher(
-              duration: quick,
-              switchInCurve: AppMotion.enter,
-              switchOutCurve: AppMotion.exit,
-              layoutBuilder: (current, previous) =>
-                  Stack(alignment: Alignment.topCenter, children: [...previous, ?current]),
-              child: _ModelGrid(
-                key: ValueKey(shown.id),
-                models: shown.models,
-                selected: selected,
-                onPick: readOnly ? null : _pickModel,
+    // 搜索过滤:当前渠道下匹配名字或描述。
+    final query = _searchQuery.trim().toLowerCase();
+    final filtered = query.isEmpty
+        ? shown.models
+        : shown.models.where((m) {
+            final name = shortModelName(m.name).toLowerCase();
+            final desc = (m.description ?? '').toLowerCase();
+            return name.contains(query) || desc.contains(query);
+          }).toList();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(inset, 8, inset, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 搜索框 + 渠道按钮,同一行
+          Row(
+            children: [
+              Expanded(
+                child: _SearchField(
+                  query: _searchQuery,
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                ),
               ),
-            ),
+              if (groups.length > 1) ...[
+                const SizedBox(width: 8),
+                _ChannelPillButton(
+                  label: shown.name,
+                  expanded: _channelExpanded,
+                  onTap: () => setState(() => _channelExpanded = !_channelExpanded),
+                ),
+              ],
+            ],
           ),
-        ),
-        // Fades out first, then the height folds away (and the reverse on the
-        // way in), so nothing below jumps.
-        SmoothSize(
-          duration: AppMotion.of(context, AppMotion.collapse),
-          curve: AppMotion.collapseCurve,
-          alignment: Alignment.topCenter,
-          child: AnimatedSwitcher(
-            duration: quick,
-            layoutBuilder: (current, previous) =>
-                Stack(alignment: Alignment.topCenter, children: [...previous, ?current]),
-            child: efforts.length < 2
-                ? const SizedBox(key: ValueKey('none'), width: double.infinity)
-                : Column(
-                    key: const ValueKey('effort'),
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(height: 16),
-                      SheetSectionLabel(appL10n.viewModelEffort),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: inset),
-                        child: SegmentedPill<String>(
-                          height: 40,
-                          segments: [for (final e in efforts) PillSegment(e.id, effortLabel(e.id, e.name))],
-                          selected: _selection?.reasoningEffort ?? selected?.defaultEffort ?? efforts.first.id,
-                          onChanged: readOnly
-                              ? null
-                              : (effort) {
-                                  if (identical(
-                                    findModel(ref.read(modelListViewProvider).value, _selection),
-                                    selected,
-                                  )) {
-                                    _pickEffort(effort);
-                                  }
-                                },
-                        ),
-                      ),
-                    ],
+          const SizedBox(height: 10),
+          // 模型列表 + 下拉浮层
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              if (filtered.isEmpty)
+                const _EmptySearch()
+              else
+                _modelGrid(filtered, selected, readOnly, ValueKey('${shown.id}:$query')),
+              // 下拉渠道列表
+              if (_channelExpanded && groups.length > 1)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: _ChannelDropdownList(
+                    groups: groups,
+                    shown: shown.id,
+                    onSelected: (id) {
+                      setState(() {
+                        _channel = id;
+                        _channelExpanded = false;
+                      });
+                    },
                   ),
+                ),
+            ],
           ),
+          _effortSelector(efforts, selected, readOnly),
+        ],
+      ),
+    );
+  }
+
+  Widget _modelGrid(List<ModelInfo> models, ModelInfo? selected, bool readOnly, Key key) {
+    final quick = AppMotion.of(context, AppMotion.quick);
+    return SmoothSize(
+      duration: AppMotion.of(context, AppMotion.standard),
+      curve: AppMotion.std,
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: quick,
+        switchInCurve: AppMotion.enter,
+        switchOutCurve: AppMotion.exit,
+        layoutBuilder: (current, previous) =>
+            Stack(alignment: Alignment.topCenter, children: [...previous, ?current]),
+        child: _ModelGrid(
+          key: key,
+          models: models,
+          selected: selected,
+          onPick: readOnly ? null : _pickModel,
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _effortSelector(List<ReasoningEffort> efforts, ModelInfo? selected, bool readOnly) {
+    final quick = AppMotion.of(context, AppMotion.quick);
+    const inset = SheetTitleBar.inset;
+    // Fades out first, then the height folds away (and the reverse on the
+    // way in), so nothing below jumps.
+    return SmoothSize(
+      duration: AppMotion.of(context, AppMotion.collapse),
+      curve: AppMotion.collapseCurve,
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: quick,
+        layoutBuilder: (current, previous) =>
+            Stack(alignment: Alignment.topCenter, children: [...previous, ?current]),
+        child: efforts.length < 2
+            ? const SizedBox(key: ValueKey('none'), width: double.infinity)
+            : Column(
+                key: const ValueKey('effort'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 16),
+                  SheetSectionLabel(appL10n.viewModelEffort),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: inset),
+                    child: SegmentedPill<String>(
+                      height: 40,
+                      segments: [for (final e in efforts) PillSegment(e.id, effortLabel(e.id, e.name))],
+                      selected: _selection?.reasoningEffort ?? selected?.defaultEffort ?? efforts.first.id,
+                      onChanged: readOnly
+                          ? null
+                          : (effort) {
+                              if (identical(
+                                findModel(ref.read(modelListViewProvider).value, _selection),
+                                selected,
+                              )) {
+                                _pickEffort(effort);
+                              }
+                            },
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }
@@ -681,74 +747,136 @@ class ManageModelsLink extends StatelessWidget {
   }
 }
 
-/// 渠道筛选:放得下就是一条整宽的 [SegmentedPill];渠道多、放不下时换成
-/// 横向可滑的一排胶囊(两端与内容对齐,滑动时可以出到弹层边缘)。
-class _ChannelBar extends StatelessWidget {
-  const _ChannelBar({required this.groups, required this.shown, required this.onChanged});
-
-  final List<ProviderGroup> groups;
-  final String shown;
-  final ValueChanged<String> onChanged;
-
-  static const height = 40.0;
-
-  @override
-  Widget build(BuildContext context) {
-    const inset = SheetTitleBar.inset;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final room = constraints.maxWidth - 2 * inset;
-        final natural = SegmentedPill.naturalWidth(context, [for (final g in groups) g.name]);
-        if (natural <= room) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: inset),
-            child: SegmentedPill<String>(
-              height: height,
-              segments: [for (final g in groups) PillSegment(g.id, g.name)],
-              selected: shown,
-              onChanged: onChanged,
-            ),
-          );
-        }
-        final style = SegmentedPill.labelStyle(context);
-        final rowHeight = MediaQuery.textScalerOf(context).scale(height);
-        return SizedBox(
-          height: rowHeight,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: inset),
-            itemCount: groups.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (context, i) => _ChannelChip(
-              label: groups[i].name,
-              selected: groups[i].id == shown,
-              style: style,
-              onTap: () => onChanged(groups[i].id),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// 一颗渠道胶囊:选中的和 [SegmentedPill] 的滑块同一种料(浅色白、深色亮灰,
-/// 带一点投影),没选中的是底槽色。
-class _ChannelChip extends StatelessWidget {
-  const _ChannelChip({required this.label, required this.selected, required this.style, required this.onTap});
+/// 渠道选择胶囊按钮:右对齐的一颗胶囊,显示当前渠道名 + 箭头。
+class _ChannelPillButton extends StatelessWidget {
+  const _ChannelPillButton({required this.label, required this.expanded, required this.onTap});
 
   final String label;
-  final bool selected;
-  final TextStyle style;
+  final bool expanded;
   final VoidCallback onTap;
+
+  static const maxWidth = 150.0;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
-    final track = dark ? Colors.white.withValues(alpha: 0.07) : colors.onSurface.withValues(alpha: 0.06);
-    final thumb = dark ? Colors.white.withValues(alpha: 0.2) : Colors.white;
+    final quick = AppMotion.of(context, AppMotion.quick);
+    return Semantics(
+      button: true,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Pressable(
+        onTap: onTap,
+        child: SizedBox(
+          height: 36,
+          child: AnimatedContainer(
+            duration: quick,
+            curve: AppMotion.std,
+            padding: const EdgeInsets.only(left: 10, right: 8),
+            decoration: ShapeDecoration(
+              color: dark ? Colors.white.withValues(alpha: 0.08) : colors.onSurface.withValues(alpha: 0.06),
+              shape: const StadiumBorder(),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(AppIcons.model, size: 14, color: colors.primary),
+                const SizedBox(width: 6),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: maxWidth - 14 - 6 - 8 - 12 - 8),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                AnimatedRotation(
+                  turns: expanded ? 0.5 : 0,
+                  duration: quick,
+                  curve: AppMotion.std,
+                  child: Icon(AppIcons.expand, size: 12, color: colors.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 展开的渠道下拉列表:浮在模型卡上方,圆角矩形,带阴影。
+class _ChannelDropdownList extends StatelessWidget {
+  const _ChannelDropdownList({required this.groups, required this.shown, required this.onSelected});
+
+  final List<ProviderGroup> groups;
+  final String shown;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    final quick = AppMotion.of(context, AppMotion.quick);
+    return Container(
+      decoration: ShapeDecoration(
+        color: dark ? const Color(0xFF1C1C1E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppShape.lg)),
+        shadows: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppShape.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < groups.length; i++) ...[
+              if (i > 0)
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: dark ? Colors.white.withValues(alpha: 0.08) : colors.onSurface.withValues(alpha: 0.06),
+                ),
+              _ChannelDropdownItem(
+                label: groups[i].name,
+                selected: groups[i].id == shown,
+                onTap: () => onSelected(groups[i].id),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 下拉列表里的单个渠道项。
+class _ChannelDropdownItem extends StatelessWidget {
+  const _ChannelDropdownItem({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final quick = AppMotion.of(context, AppMotion.quick);
     return Semantics(
       button: true,
@@ -762,24 +890,92 @@ class _ChannelChip extends StatelessWidget {
         child: AnimatedContainer(
           duration: quick,
           curve: AppMotion.std,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          alignment: Alignment.center,
-          decoration: ShapeDecoration(
-            color: selected ? thumb : track,
-            shape: const StadiumBorder(),
-            shadows: selected && !dark
-                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 6, offset: const Offset(0, 1))]
-                : null,
-          ),
-          child: AnimatedDefaultTextStyle(
-            duration: quick,
-            style: style.copyWith(
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected ? colors.onSurface : colors.onSurfaceVariant,
-            ),
-            child: Text(label, maxLines: 1, softWrap: false),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          color: selected ? colors.primary.withValues(alpha: 0.1) : Colors.transparent,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (selected)
+                Icon(AppIcons.selected, size: 16, color: colors.primary),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 搜索框:胶囊形状,左侧搜索图标,右侧清空按钮。
+class _SearchField extends StatelessWidget {
+  const _SearchField({required this.query, required this.onChanged});
+
+  final String query;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    return SizedBox(
+      height: 36,
+      child: TextField(
+        onChanged: onChanged,
+        style: theme.textTheme.bodyMedium,
+        textAlignVertical: TextAlignVertical.center,
+        decoration: InputDecoration(
+          isCollapsed: true,
+          contentPadding: EdgeInsets.zero,
+          filled: true,
+          fillColor: dark ? Colors.white.withValues(alpha: 0.07) : colors.onSurface.withValues(alpha: 0.06),
+          border: const OutlineInputBorder(
+            borderRadius: BorderRadius.all(Radius.circular(AppShape.lg)),
+            borderSide: BorderSide.none,
+          ),
+          prefixIcon: Icon(AppIcons.search, size: 16, color: colors.onSurfaceVariant),
+          suffixIcon: query.isEmpty
+              ? null
+              : GestureDetector(
+                  onTap: () => onChanged(''),
+                  child: Icon(AppIcons.close, size: 16, color: colors.onSurfaceVariant),
+                ),
+          hintText: '搜索模型',
+          hintStyle: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+}
+
+/// 搜索无结果时的空状态。
+class _EmptySearch extends StatelessWidget {
+  const _EmptySearch();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(AppIcons.search, size: 24, color: colors.onSurfaceVariant),
+          const SizedBox(height: 8),
+          Text(
+            '没有找到匹配的模型',
+            style: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ],
       ),
     );
   }
@@ -828,8 +1024,8 @@ class _ModelGrid extends StatelessWidget {
   }
 }
 
-/// 一张模型卡:短名(最多两行)+ 一行描述,右上角选择圈。选中时卡面染一层
-/// 很淡的主色、描一圈主色细边、圈里是实心对勾 —— 这一屏唯一的实心主色。
+/// 一张模型卡:短名(最多两行)+ 一行描述。选中时卡面染主色浅色背景、
+/// 描一圈主色细边——单选靠底色和边框区分,不用勾选圈。
 class _ModelCard extends StatelessWidget {
   const _ModelCard({super.key, required this.model, required this.selected, required this.onTap});
 
@@ -864,10 +1060,10 @@ class _ModelCard extends StatelessWidget {
           child: AnimatedContainer(
             duration: duration,
             curve: AppMotion.std,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: ShapeDecoration(
               color: selected
-                  ? colors.primary.withValues(alpha: dark ? 0.14 : 0.07)
+                  ? colors.primary.withValues(alpha: dark ? 0.18 : 0.1)
                   : colors.primary.withValues(alpha: 0),
               shape: RoundedSuperellipseBorder(
                 borderRadius: radius,
@@ -883,25 +1079,20 @@ class _ModelCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Row(
-                  children: [
-                    // 14 / two lines: the row leaves the name ~109 dp on a
-                    // 390 dp phone, so "GPT 5.6 Terra" at titleMedium's 16 was
-                    // cut after the first words.
-                    Expanded(
-                      child: Text(
-                        name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(height: 1.35),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _CheckMark(selected: selected),
-                  ],
+                // 14 / two lines: the row leaves the name ~109 dp on a
+                // 390 dp phone, so "GPT 5.6 Terra" at titleMedium's 16 was
+                // cut after the first words.
+                Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    height: 1.3,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  ),
                 ),
                 if (description != null && description.isNotEmpty) ...[
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Text(
                     description,
                     maxLines: 1,
@@ -913,50 +1104,6 @@ class _ModelCard extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// 20 的选择圈:没选中是一道细环,选中是实心主色 + 白对勾(缩放淡入)。
-class _CheckMark extends StatelessWidget {
-  const _CheckMark({required this.selected});
-
-  final bool selected;
-
-  static const size = 20.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final ring = theme.brightness == Brightness.dark
-        ? Colors.white.withValues(alpha: 0.22)
-        : colors.onSurface.withValues(alpha: 0.18);
-    return SizedBox.square(
-      dimension: size,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          DecoratedBox(
-            decoration: ShapeDecoration(
-              shape: CircleBorder(side: BorderSide(color: ring, width: 1.5)),
-            ),
-          ),
-          AnimatedScale(
-            scale: selected ? 1 : 0.5,
-            duration: AppMotion.of(context, AppMotion.quick),
-            curve: AppMotion.std,
-            child: AnimatedOpacity(
-              opacity: selected ? 1 : 0,
-              duration: AppMotion.of(context, AppMotion.quick),
-              child: DecoratedBox(
-                decoration: ShapeDecoration(color: colors.primary, shape: const CircleBorder()),
-                child: Icon(AppIcons.selected, size: 14, color: colors.onPrimary),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
