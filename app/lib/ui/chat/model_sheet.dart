@@ -403,10 +403,10 @@ Future<void> showModelSheet(
 }
 
 /// ```
-///                    ───
-///   选择模型                               (×)
-///
-///   ((  DeepSeek  )   OpenRouter            )    渠道多于一个时
+///                       ───
+///   ╭────────────────────────────╮  (( DeepSeek ▾ ))
+///   │ 搜索模型                    │
+///   ╰────────────────────────────╯
 ///
 ///   ╭─────────────────╮  ╭─────────────────╮
 ///   │ V4 Pro       (✓)│  │ V41 Flash    ( )│
@@ -417,7 +417,9 @@ Future<void> showModelSheet(
 ///   (( 不思考 )  低      ( 高 )     最高   )
 /// ```
 ///
-/// 渠道条只是筛选,不改当前选择;打开时停在当前模型所在的渠道。
+/// 渠道是一个下拉按钮:展开后列出全部渠道,选中只筛选、不改当前选择;打开时
+/// 停在当前模型所在的渠道。单渠道时连这个按钮都不出现。确认模式(设置页用)
+/// 换了模型不立即回调,由底部保存栏提交。
 class _ModelSheet extends ConsumerStatefulWidget {
   const _ModelSheet({required this.current, required this.onSelected, required this.confirmSelection});
 
@@ -679,7 +681,6 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
 
   Widget _effortSelector(List<ReasoningEffort> efforts, ModelInfo? selected, bool readOnly) {
     final quick = AppMotion.of(context, AppMotion.quick);
-    const inset = SheetTitleBar.inset;
     // Fades out first, then the height folds away (and the reverse on the
     // way in), so nothing below jumps.
     return SmoothSize(
@@ -698,24 +699,25 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(height: 16),
-                  SheetSectionLabel(appL10n.viewModelEffort),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: inset),
-                    child: SegmentedPill<String>(
-                      height: 40,
-                      segments: [for (final e in efforts) PillSegment(e.id, effortLabel(e.id, e.name))],
-                      selected: _selection?.reasoningEffort ?? selected?.defaultEffort ?? efforts.first.id,
-                      onChanged: readOnly
-                          ? null
-                          : (effort) {
-                              if (identical(
-                                findModel(ref.read(modelListViewProvider).value, _selection),
-                                selected,
-                              )) {
-                                _pickEffort(effort);
-                              }
-                            },
-                    ),
+                  // The picker already insets its column, so the label sits 8
+                  // inside it -- not another whole inset in from it.
+                  SheetSectionLabel(appL10n.viewModelEffort, inset: 0),
+                  // The picker already insets its column: the pill spans it,
+                  // level with the cards, the search field and its own label.
+                  SegmentedPill<String>(
+                    height: 40,
+                    segments: [for (final e in efforts) PillSegment(e.id, effortLabel(e.id, e.name))],
+                    selected: _selection?.reasoningEffort ?? selected?.defaultEffort ?? efforts.first.id,
+                    onChanged: readOnly
+                        ? null
+                        : (effort) {
+                            if (identical(
+                              findModel(ref.read(modelListViewProvider).value, _selection),
+                              selected,
+                            )) {
+                              _pickEffort(effort);
+                            }
+                          },
                   ),
                 ],
               ),
@@ -948,7 +950,7 @@ class _SearchField extends StatelessWidget {
                   onTap: () => onChanged(''),
                   child: Icon(AppIcons.close, size: 16, color: colors.onSurfaceVariant),
                 ),
-          hintText: '搜索模型',
+          hintText: appL10n.engineProviderSearchModels,
           hintStyle: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
         ),
       ),
@@ -972,7 +974,7 @@ class _EmptySearch extends StatelessWidget {
           Icon(AppIcons.search, size: 24, color: colors.onSurfaceVariant),
           const SizedBox(height: 8),
           Text(
-            '没有找到匹配的模型',
+            appL10n.engineProviderNoMatchingModels,
             style: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
           ),
         ],
