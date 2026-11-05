@@ -14,6 +14,8 @@ import 'app_links.dart';
 const magpieProviderLinkHost = 'providers';
 const magpieProviderLinkPath = '/magpie';
 
+enum MagpieImportMode { api, provider }
+
 bool isMagpieProviderLink(Uri uri) =>
     uri.scheme.toLowerCase() == appLinkScheme &&
     uri.host.toLowerCase() == magpieProviderLinkHost &&
@@ -26,9 +28,10 @@ bool isMagpieProviderLink(Uri uri) =>
 /// Configure the local Magpie provider through DSH's own ProviderBackend.
 /// The resulting profile and credential land in the active web profile's
 /// cordis.patch.yml and credential store; no cross-app private file is read.
-Future<int> configureMagpieProvider(WidgetRef ref) async {
+Future<int> configureMagpieProvider(WidgetRef ref, {MagpieImportMode mode = MagpieImportMode.api}) async {
   final backend = ref.read(providerBackendProvider);
   if (backend == null) throw ProviderFailure(appL10n.stateProviderOffline);
+  if (!backend.isLocal) throw ProviderFailure(appL10n.magpieConnectUnavailable);
   ref.read(readListCredentialEpochProvider.notifier).advance();
 
   final discoveredModels = await backend.discover(
@@ -48,39 +51,56 @@ Future<int> configureMagpieProvider(WidgetRef ref) async {
       ],
   };
   final grouped = groupMagpieModels(discoveredModels, metadata, existing: previous);
-  for (final kind in MagpieRouteKind.values) {
-    final models = grouped[kind]!;
-    final existing = profiles.where((profile) => profile.route == kind.route).firstOrNull;
-    if (models.isEmpty) {
-      if (existing != null) {
-        final revision = (await backend.read())?.revision ?? settings?.revision;
-        await backend.remove(existing.route, expectedRevision: revision);
+  List<ProviderModelSpec> rebased(MagpieRouteKind kind, ProviderProfile? profile) => [
+    for (final spec in grouped[kind]!)
+      magpieModelSpec(
+        discoveredModels.firstWhere((model) => model.id == spec.id),
+        metadata: metadata[spec.id] ?? const <String, Object?>{},
+        previous: profile?.models.where((old) => old.id == spec.id).firstOrNull,
+        route: kind,
+      ),
+  ];
+  final routes = mode == MagpieImportMode.provider
+      ? groupMagpieProviderRoutes(grouped, metadata)
+      : [
+          for (final kind in MagpieRouteKind.values)
+            MagpieProviderRoute('api', kind, kind.route, kind.displayName, grouped[kind]!),
+        ];
+  for (final route in routes) {
+    final kind = route.kind;
+    final existing = profiles.where((profile) => profile.route == route.route).firstOrNull;
+    final latest = await backend.read();
+    final latestExisting = latest?.profiles.where((profile) => profile.route == route.route).firstOrNull;
+    if (route.models.isEmpty) {
+      if (latestExisting != null) {
+        await backend.remove(latestExisting.route, expectedRevision: latest?.revision ?? settings?.revision);
       }
       continue;
     }
-    if (existing == null) {
+    if (latestExisting == null) {
+      if (existing != null) throw ProviderFailure(appL10n.magpieConnectConflict);
       await backend.create(
         ProviderProfile(
-          route: kind.route,
-          displayName: kind.displayName,
+          route: route.route,
+          displayName: route.displayName,
           api: kind.api.wire,
           baseUrl: kind.baseUrl,
           apiKeyEnv: magpieGatewayKeyRef,
-          models: models,
+          models: rebased(kind, null),
           streamIdleTimeoutMs: magpieStreamIdleTimeoutMs,
         ),
+        expectedRevision: latest?.revision ?? settings?.revision,
       );
     } else {
-      final revision = (await backend.read())?.revision ?? settings?.revision;
       await backend.update(
-        existing.route,
-        displayName: kind.displayName,
+        latestExisting.route,
+        displayName: route.displayName,
         api: kind.api,
         baseUrl: kind.baseUrl,
         apiKeyEnv: magpieGatewayKeyRef,
-        models: models,
-        streamIdleTimeoutMs: existing.streamIdleTimeoutMs ?? magpieStreamIdleTimeoutMs,
-        expectedRevision: revision,
+        models: rebased(kind, latestExisting),
+        streamIdleTimeoutMs: magpieStreamIdleTimeoutMs,
+        expectedRevision: latest?.revision ?? settings?.revision,
       );
     }
   }
@@ -111,23 +131,24 @@ VoidCallback registerMagpieLinks(LinkRouter router, WidgetRef ref) => router.reg
     if (!isMagpieProviderLink(uri)) return false;
     final context = router.context;
     if (context == null || !context.mounted) return false;
-    final confirmed = await showDialog<bool>(
+    final mode = await showDialog<MagpieImportMode>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(appL10n.magpieConnectTitle),
         content: Text(appL10n.magpieConnectBody),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(appL10n.commonCancel)),
-          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text(appL10n.commonConfirm)),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(appL10n.commonCancel)),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(MagpieImportMode.api), child: Text(appL10n.magpieConnectApi)),
+          OutlinedButton(onPressed: () => Navigator.of(dialogContext).pop(MagpieImportMode.provider), child: Text(appL10n.magpieConnectProvider)),
         ],
       ),
     );
-    if (confirmed != true) return true;
+    if (mode == null) return true;
     if (!context.mounted) return true;
     final messenger = ScaffoldMessenger.maybeOf(context);
     messenger?.showSnackBar(SnackBar(content: Text(appL10n.magpieConnecting)));
     try {
-      final count = await configureMagpieProvider(ref);
+      final count = await configureMagpieProvider(ref, mode: mode);
       messenger?.showSnackBar(SnackBar(content: Text(appL10n.magpieConnectSuccess(count))));
     } catch (error) {
       messenger?.showSnackBar(SnackBar(content: Text(appL10n.magpieConnectFailed(describeProviderError(error)))));

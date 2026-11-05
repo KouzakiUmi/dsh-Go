@@ -11744,6 +11744,9 @@
       }
     }
   },
+  "magpieConnectApi": "按 API 导入",
+  "magpieConnectProvider": "导入 Magpie Group",
+  "magpieConnectConflict": "Magpie 路由在导入期间发生变化，请检查后重试。",
   "voiceSettingsTitle": "语音输入",
   "voiceModeAuto": "自动",
   "voiceModeSystem": "系统",

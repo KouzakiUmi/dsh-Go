@@ -26,14 +26,18 @@ Future<Map<String, Map<String, Object?>>> fetchMagpieModelMetadata() async {
     final request = await client.getUrl(Uri.parse('$magpieGatewayBaseUrl/models'));
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $magpieGatewayApiKey');
-    final response = await request.close();
+    final response = await request.close().timeout(const Duration(seconds: 10));
     if (response.statusCode != HttpStatus.ok) {
       throw MagpieModelDiscoveryException('Magpie model listing answered ${response.statusCode}');
     }
-    final text = await response.transform(utf8.decoder).join();
-    if (text.length > 4 * 1024 * 1024) {
-      throw const MagpieModelDiscoveryException('Magpie model listing is too large');
+    final buffer = StringBuffer();
+    await for (final chunk in response.transform(utf8.decoder).timeout(const Duration(seconds: 15))) {
+      buffer.write(chunk);
+      if (buffer.length > 4 * 1024 * 1024) {
+        throw const MagpieModelDiscoveryException('Magpie model listing is too large');
+      }
     }
+    final text = buffer.toString();
     final decoded = jsonDecode(text);
     if (decoded is! Map || decoded['data'] is! List) {
       throw const MagpieModelDiscoveryException('Magpie model listing has no data array');
@@ -63,7 +67,21 @@ int? _cappedMaxTokens(DiscoveredModel model) {
 
 List<String>? _reasoningLevels(Map<String, Object?> metadata) {
   final raw = metadata['supported_reasoning_levels'] ?? metadata['reasoning_levels'];
-  return raw is List ? raw.whereType<String>().where((level) => level.isNotEmpty).toList(growable: false) : null;
+  if (raw is! List) return null;
+  const aliases = <String, String>{
+    'none': 'off',
+    'off': 'off',
+    'minimal': 'minimal',
+    'light': 'low',
+    'low': 'low',
+    'medium': 'medium',
+    'high': 'high',
+    'xhigh': 'xhigh',
+    'extra_high': 'xhigh',
+    'ultra': 'max',
+    'max': 'max',
+  };
+  return raw.whereType<String>().map((level) => aliases[level.toLowerCase()]).whereType<String>().toSet().toList(growable: false);
 }
 
 /// Build one model while preserving a previous model's compat switches and
@@ -99,12 +117,20 @@ ProviderModelSpec magpieModelSpec(
   if (compat.isNotEmpty) extra['compat'] = compat;
   final levels = _reasoningLevels(metadata);
   if (metadata.isNotEmpty) extra.remove('reasoningEfforts');
+  final rawModalities = metadata['modalities'];
+  final metadataInput = rawModalities is Map && rawModalities['input'] is List
+      ? (rawModalities['input'] as List).whereType<String>().toList(growable: false)
+      : null;
+  final input = model.inputModalities ?? metadataInput ?? previous?.input;
+  final owner = metadata['owned_by'] as String?;
+  final rawName = (metadata['display_name'] as String?) ?? model.name ?? previous?.name ?? model.id;
+  final displayName = owner != null && owner.isNotEmpty ? '$owner · $rawName' : rawName;
   final spec = ProviderModelSpec(
     id: model.id,
-    name: (metadata['display_name'] as String?) ?? model.name ?? previous?.name,
+    name: displayName,
     contextWindow: model.contextWindow ?? previous?.contextWindow,
     maxTokens: previous?.maxTokens ?? _cappedMaxTokens(model),
-    input: model.inputModalities ?? previous?.input,
+    input: input,
     extra: extra,
   );
   return levels == null ? spec : spec.withReasoningEfforts(levels);
@@ -150,6 +176,42 @@ String magpieProviderModelId(DiscoveredModel model, Map<String, Map<String, Obje
   return model.id;
 }
 
+String magpieOwnerOf(DiscoveredModel model, Map<String, Map<String, Object?>> metadata) {
+  final owner = metadata[model.id]?['owned_by'];
+  if (owner is String && owner.isNotEmpty && owner != 'auto') return owner;
+  final separator = model.id.indexOf('/');
+  return separator > 0 ? model.id.substring(0, separator) : 'other';
+}
+
+class MagpieProviderRoute {
+  const MagpieProviderRoute(this.owner, this.kind, this.route, this.displayName, this.models);
+  final String owner;
+  final MagpieRouteKind kind;
+  final String route;
+  final String displayName;
+  final List<ProviderModelSpec> models;
+}
+
+List<MagpieProviderRoute> groupMagpieProviderRoutes(
+  Map<MagpieRouteKind, List<ProviderModelSpec>> grouped,
+  Map<String, Map<String, Object?>> metadata,
+) {
+  return [
+    for (final kind in MagpieRouteKind.values)
+      MagpieProviderRoute(
+        'group',
+        kind,
+        'magpie-group${kind == MagpieRouteKind.completions ? '' : kind == MagpieRouteKind.responses ? '-responses' : '-anthropic'}',
+        'Magpie Group${kind == MagpieRouteKind.completions ? '' : kind == MagpieRouteKind.responses ? ' · Responses' : ' · Anthropic'}',
+        [...grouped[kind]!]..sort((a, b) {
+          final ownerA = metadata[a.id]?['owned_by'] as String? ?? a.id;
+          final ownerB = metadata[b.id]?['owned_by'] as String? ?? b.id;
+          return ownerA.compareTo(ownerB);
+        }),
+      ),
+  ];
+}
+
 Map<MagpieRouteKind, List<ProviderModelSpec>> groupMagpieModels(
   List<DiscoveredModel> discovered,
   Map<String, Map<String, Object?>> metadata, {
@@ -169,7 +231,11 @@ Map<MagpieRouteKind, List<ProviderModelSpec>> groupMagpieModels(
       maxTokens: original.maxTokens,
       inputModalities: original.inputModalities,
     );
-    rawById[id] = metadata[id] ?? metadata[original.id] ?? rawById[id] ?? const <String, Object?>{};
+    rawById[id] = {
+      ...?rawById[id],
+      ...?metadata[original.id],
+      ...?metadata[id],
+    };
   }
   for (final model in unique.values) {
     final raw = rawById[model.id] ?? const <String, Object?>{};

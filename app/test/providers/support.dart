@@ -106,7 +106,7 @@ class FakeProviderBackend implements ProviderBackend {
   Future<Map<String, String>> diagnostics() async => diagnosticsByRoute;
 
   @override
-  Future<ProviderSettings> create(ProviderProfile profile) async {
+  Future<ProviderSettings> create(ProviderProfile profile, {int? expectedRevision}) async {
     calls.add(('create', profile.toJson()..['route'] = profile.route));
     profiles
       ..removeWhere((p) => p.route == profile.route)

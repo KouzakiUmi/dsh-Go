@@ -18817,6 +18817,15 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get magpieConnectApi => 'Import by API';
+
+  @override
+  String get magpieConnectProvider => 'Import into Magpie Group';
+
+  @override
+  String get magpieConnectConflict => 'The Magpie route changed during import. Please review it and try again.';
+
+  @override
   String get voiceSettingsTitle => 'Voice input';
 
   @override

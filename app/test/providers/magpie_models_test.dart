@@ -92,6 +92,51 @@ void main() {
     expect(grouped[MagpieRouteKind.anthropic]!.single.id, 'copilot/claude-opus-5-5');
   });
 
+  test('reads rich modalities and native reasoning names', () {
+    const model = DiscoveredModel(id: 'vision');
+    final spec = magpieModelSpec(model, metadata: {
+      'modalities': {'input': ['text', 'image']},
+      'supported_reasoning_levels': ['none', 'light', 'extra_high', 'ultra'],
+    });
+    expect(spec.input, ['text', 'image']);
+    expect(spec.reasoningEfforts, {'off': null, 'low': 'low', 'xhigh': 'xhigh', 'max': 'max'});
+  });
+
+  test('merges alias metadata when canonical metadata is sparse', () {
+    const models = [DiscoveredModel(id: 'auto/x'), DiscoveredModel(id: 'p/x')];
+    final grouped = groupMagpieModels(models, {
+      'auto/x': {
+        'owned_by': 'p',
+        'native_endpoints': ['/v1/messages'],
+        'supported_reasoning_levels': ['high'],
+        'modalities': {'input': ['text', 'image']},
+      },
+      'p/x': {},
+    });
+    final model = grouped[MagpieRouteKind.anthropic]!.single;
+    expect(model.input, ['text', 'image']);
+    expect(model.reasoningEfforts, {'high': 'high'});
+  });
+
+  test('groups models by provider inside Magpie Group protocol routes', () {
+    const models = [
+      DiscoveredModel(id: 'auto/glm-5.3-flash'),
+      DiscoveredModel(id: 'auto/claude-opus-5-5'),
+    ];
+    final grouped = groupMagpieModels(models, {
+      'auto/glm-5.3-flash': {'owned_by': 'volcengine', 'native_endpoints': ['/v1/responses']},
+      'auto/claude-opus-5-5': {'owned_by': 'copilot', 'native_endpoints': ['/v1/messages']},
+    });
+    final routes = groupMagpieProviderRoutes(grouped, {
+      'auto/glm-5.3-flash': {'owned_by': 'volcengine', 'native_endpoints': ['/v1/responses']},
+      'auto/claude-opus-5-5': {'owned_by': 'copilot', 'native_endpoints': ['/v1/messages']},
+    });
+    expect(routes.map((r) => r.route), ['magpie-group', 'magpie-group-responses', 'magpie-group-anthropic']);
+    expect(routes.map((r) => r.displayName), ['Magpie Group', 'Magpie Group · Responses', 'Magpie Group · Anthropic']);
+    expect(routes[1].models.single.name, startsWith('volcengine · '));
+    expect(routes[2].models.single.name, startsWith('copilot · '));
+  });
+
   test('accepts only the exact Magpie provider deep link', () {
     expect(isMagpieProviderLink(Uri.parse('dshgo://providers/magpie')), isTrue);
     expect(isMagpieProviderLink(Uri.parse('dshgo://providers/magpie?key=x')), isFalse);

@@ -32264,6 +32264,24 @@ abstract class L10n {
   /// **'无法接入 Magpie：{error}'**
   String magpieConnectFailed(String error);
 
+  /// No description provided for @magpieConnectApi.
+  ///
+  /// In zh, this message translates to:
+  /// **'按 API 导入'**
+  String get magpieConnectApi;
+
+  /// No description provided for @magpieConnectProvider.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 Magpie Group'**
+  String get magpieConnectProvider;
+
+  /// No description provided for @magpieConnectConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'Magpie 路由在导入期间发生变化，请检查后重试。'**
+  String get magpieConnectConflict;
+
   /// No description provided for @voiceSettingsTitle.
   ///
   /// In zh, this message translates to:

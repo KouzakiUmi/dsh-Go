@@ -17804,6 +17804,15 @@ class L10nZh extends L10n {
   }
 
   @override
+  String get magpieConnectApi => '按 API 导入';
+
+  @override
+  String get magpieConnectProvider => '导入 Magpie Group';
+
+  @override
+  String get magpieConnectConflict => 'Magpie 路由在导入期间发生变化，请检查后重试。';
+
+  @override
   String get voiceSettingsTitle => '语音输入';
 
   @override

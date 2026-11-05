@@ -25,7 +25,7 @@ abstract class ProviderBackend {
   /// Configuration diagnostics by route (`llm/listConfigurableProviders`).
   Future<Map<String, String>> diagnostics();
 
-  Future<ProviderSettings> create(ProviderProfile profile);
+  Future<ProviderSettings> create(ProviderProfile profile, {int? expectedRevision});
 
   Future<ProviderSettings> update(
     String id, {
@@ -105,7 +105,8 @@ class ClientProviderBackend implements ProviderBackend {
   };
 
   @override
-  Future<ProviderSettings> create(ProviderProfile profile) => client.saveProvider(profile);
+  Future<ProviderSettings> create(ProviderProfile profile, {int? expectedRevision}) =>
+      client.saveProvider(profile, expectedRevision: expectedRevision);
 
   @override
   Future<ProviderSettings> update(
