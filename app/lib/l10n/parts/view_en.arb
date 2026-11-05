@@ -362,5 +362,8 @@
         "type": "String"
       }
     }
-  }
+  },
+  "magpieConnectApi": "Import by API",
+  "magpieConnectProvider": "Import into Magpie Group",
+  "magpieConnectConflict": "The Magpie route changed during import. Please review it and try again."
 }
