@@ -117,12 +117,7 @@ Future<int> configureMagpieProvider(WidgetRef ref, {MagpieImportMode mode = Magp
   ref
     ..invalidate(customProvidersProvider)
     ..invalidate(modelCatalogProvider);
-  var checked = 0;
-  for (final kind in MagpieRouteKind.values) {
-    if (grouped[kind]!.isEmpty) continue;
-    checked += (await backend.discover(provider: kind.route, baseUrl: kind.baseUrl, api: kind.api)).length;
-  }
-  return checked;
+  return routes.fold<int>(0, (total, route) => total + route.models.length);
 }
 
 VoidCallback registerMagpieLinks(LinkRouter router, WidgetRef ref) => router.registerLinkHandler(
