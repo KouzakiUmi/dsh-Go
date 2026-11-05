@@ -203,10 +203,10 @@ void main() {
   });
 
   group('behaviour', () {
-    testWidgets('one channel: a label, no filter; cards and efforts', (tester) async {
+    testWidgets('one channel: no channel control; cards and efforts', (tester) async {
       await _openSheet(tester, _harness(testCatalog));
-      expect(find.text('选择模型'), findsOneWidget);
-      expect(find.text('DeepSeek'), findsOneWidget);
+      expect(find.text('选择模型'), findsNothing);
+      expect(find.text('DeepSeek'), findsNothing);
       expect(find.text('V4 Pro'), findsOneWidget);
       expect(find.text('V41 Flash'), findsOneWidget);
       expect(find.text('思考深度'), findsOneWidget);
@@ -225,10 +225,15 @@ void main() {
           model: const ModelSelection(provider: 'openrouter', model: 'z-ai/glm-4.6', reasoningEffort: 'off'),
         ),
       );
-      expect(find.byType(SegmentedPill<String>), findsNWidgets(2));
+      expect(find.byType(SegmentedPill<String>), findsOneWidget);
+      expect(find.text('OpenRouter'), findsOneWidget);
+      expect(find.text('DeepSeek'), findsNothing);
       expect(find.text('GLM 4.6'), findsOneWidget);
       expect(find.text('V4 Pro'), findsNothing);
 
+      await tester.tap(find.text('OpenRouter'));
+      await pumpFrames(tester, 4);
+      expect(find.text('DeepSeek'), findsOneWidget);
       await tester.tap(find.text('DeepSeek'));
       await pumpFrames(tester, 4);
       expect(find.text('V4 Pro'), findsOneWidget);
@@ -243,11 +248,13 @@ void main() {
       expect(picked.provider, 'deepseek-official');
       expect(picked.model, 'deepseek-flash');
       expect(picked.reasoningEffort, 'off', reason: 'supported: kept');
-      expect(find.text('选择模型'), findsOneWidget, reason: 'stays open');
+      expect(find.text('V41 Flash'), findsOneWidget, reason: 'stays open');
     });
 
     testWidgets('a model without efforts folds the effort selector away', (tester) async {
       final harness = await _openSheet(tester, _harness(multiCatalog));
+      await tester.tap(find.text('DeepSeek'));
+      await pumpFrames(tester, 4);
       await tester.tap(find.text('OpenRouter'));
       await pumpFrames(tester, 4);
       await tester.tap(find.text('Kimi K2'));
@@ -272,6 +279,8 @@ void main() {
           model: const ModelSelection(provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: 'max'),
         ),
       );
+      await tester.tap(find.text('DeepSeek'));
+      await pumpFrames(tester, 4);
       await tester.tap(find.text('My Gateway'));
       await pumpFrames(tester, 4);
       await tester.tap(find.text('Qwen3 Coder'));
@@ -313,7 +322,9 @@ void main() {
     testWidgets('crowded channels scroll sideways instead of squeezing', (tester) async {
       await _openSheet(tester, _harness(crowdedCatalog));
       expect(find.byType(SegmentedPill<String>), findsOneWidget);
-      expect(find.byType(ListView), findsOneWidget);
+      await tester.tap(find.text('DeepSeek'));
+      await pumpFrames(tester, 4);
+      expect(find.byType(SingleChildScrollView), findsWidgets);
       await tester.tap(find.text('OpenRouter'));
       await pumpFrames(tester, 4);
       expect(find.text('Kimi K2'), findsOneWidget);
@@ -422,12 +433,10 @@ void main() {
           expect(pill.right, moreOrLessEquals(flash.right, epsilon: 0.5));
         }
 
-        // Removing the close key must also reclaim its column and gutter.
-        final title = tester.getRect(find.text('选择模型'));
+        // The picker has no title row or close key: the drag handle dismisses it.
         expect(find.byType(SheetDragHandle), findsOneWidget);
         expect(find.byTooltip('关闭'), findsNothing);
-        expect(title.left, moreOrLessEquals(SheetTitleBar.inset, epsilon: 0.5));
-        expect(width - title.right, moreOrLessEquals(SheetTitleBar.inset, epsilon: 0.5));
+        expect(find.text('选择模型'), findsNothing);
         expect(tester.takeException(), isNull);
       });
     }

@@ -73,6 +73,10 @@ Future<int> configureMagpieProvider(WidgetRef ref, {MagpieImportMode mode = Magp
     final existing = profiles.where((profile) => profile.route == route.route).firstOrNull;
     final latest = await backend.read();
     final latestExisting = latest?.profiles.where((profile) => profile.route == route.route).firstOrNull;
+    final latestLegacy = mode == MagpieImportMode.provider
+        ? latest?.profiles.where((profile) => profile.route == magpieLegacySupplierRoute(route) && profile.route != route.route).firstOrNull
+        : null;
+    final previousProfile = latestExisting ?? latestLegacy;
     if (route.models.isEmpty) {
       if (latestExisting != null) {
         await backend.remove(latestExisting.route, expectedRevision: latest?.revision ?? settings?.revision);
@@ -100,10 +104,28 @@ Future<int> configureMagpieProvider(WidgetRef ref, {MagpieImportMode mode = Magp
         api: kind.api,
         baseUrl: kind.baseUrl,
         apiKeyEnv: magpieGatewayKeyRef,
-        models: rebased(route, latestExisting),
+        models: rebased(route, previousProfile),
         streamIdleTimeoutMs: magpieStreamIdleTimeoutMs,
         expectedRevision: latest?.revision ?? settings?.revision,
       );
+    }
+  }
+  if (mode == MagpieImportMode.provider) {
+    final desiredRoutes = routes.map((route) => route.route).toSet();
+    final apiRoutes = MagpieRouteKind.values.map((kind) => kind.route).toSet();
+    final latest = await backend.read();
+    for (final profile in latest?.profiles ?? const <ProviderProfile>[]) {
+      if (desiredRoutes.contains(profile.route) || apiRoutes.contains(profile.route)) continue;
+      final managed = profile.route.startsWith('magpie-provider-') ||
+          (profile.route.startsWith('magpie-') && (profile.displayName ?? '').startsWith('Magpie · '));
+      final owned = profile.apiKeyEnv == magpieGatewayKeyRef &&
+          (profile.baseUrl == magpieGatewayBaseUrl || profile.baseUrl == 'http://127.0.0.1:3425');
+      if (!managed || !owned) continue;
+      final current = await backend.read();
+      final currentProfile = current?.profiles.where((item) => item.route == profile.route).firstOrNull;
+      if (currentProfile != null) {
+        await backend.remove(profile.route, expectedRevision: current?.revision ?? latest?.revision);
+      }
     }
   }
   if (mode == MagpieImportMode.provider) {

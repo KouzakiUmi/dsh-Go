@@ -290,6 +290,8 @@ To inspect APK build commands without building:
 DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh --dry-run -f all
 ```
 
+When only the UI changed, the runtime does not need rebuilding; see [fast builds](docs/testing/fast-builds.md) for the shorter loop.
+
 ## Repository layout
 
 | Path | Contents |

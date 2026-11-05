@@ -90,7 +90,7 @@ node sdk/plugin-kit/scripts/sync-skill.mjs
 node sdk/plugin-kit/scripts/sync-skill.mjs --check
 ```
 
-For APK validation, use the build entry point in the README. For changes to Android processes, PRoot, direct startup, phone control or update installation, record the ABI, Android version, startup mode and device used. Desktop test results do not establish device behavior.
+For APK validation, use the build entry point in the README; when the goal is only shipping an APK to check the UI, the runtime does not need rebuilding — see [fast builds](docs/testing/fast-builds.md). For changes to Android processes, PRoot, direct startup, phone control or update installation, record the ABI, Android version, startup mode and device used. Desktop test results do not establish device behavior.
 
 Online checks, deployments and publishing scripts under `services/` and `infra/` are not part of routine contribution checks. When changing a companion service, confirm that tests target your own local environment; do not run examples with production credentials.
 

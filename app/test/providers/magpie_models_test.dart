@@ -179,6 +179,12 @@ void main() {
     }
   });
 
+  test('maps legacy supplier routes for migration', () {
+    final route = MagpieProviderRoute('foo', MagpieRouteKind.responses, 'magpie-provider-foo-12345678-responses', 'Magpie · foo · Responses', const []);
+    expect(magpieLegacySupplierRoute(route), 'magpie-foo-responses');
+    expect(magpieLegacySupplierRoute(MagpieProviderRoute('foo', MagpieRouteKind.completions, 'x', 'x', const [])), 'magpie-foo');
+  });
+
   test('accepts only the exact Magpie provider deep link', () {
     expect(isMagpieProviderLink(Uri.parse('dshgo://providers/magpie')), isTrue);
     expect(isMagpieProviderLink(Uri.parse('dshgo://providers/magpie?key=x')), isFalse);

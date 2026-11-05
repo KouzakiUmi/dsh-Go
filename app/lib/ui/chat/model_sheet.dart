@@ -442,9 +442,12 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
 
   /// Whether the channel dropdown is expanded.
   bool _channelExpanded = false;
+  final _channelButtonKey = GlobalKey();
+  final _channelOverlay = OverlayPortalController();
 
   /// Search query for filtering models.
   String _searchQuery = '';
+  late final TextEditingController _searchController = TextEditingController();
 
   /// Closes the sheet once the effort thumb has landed.
   Timer? _close;
@@ -452,7 +455,22 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
   @override
   void dispose() {
     _close?.cancel();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _toggleChannels() {
+    setState(() => _channelExpanded = !_channelExpanded);
+    if (_channelExpanded) {
+      _channelOverlay.show();
+    } else {
+      _channelOverlay.hide();
+    }
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() => _searchQuery = '');
   }
 
   void _pickModel(ModelInfo model) {
@@ -609,16 +627,42 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
             children: [
               Expanded(
                 child: _SearchField(
+                  controller: _searchController,
                   query: _searchQuery,
                   onChanged: (v) => setState(() => _searchQuery = v),
+                  onClear: _clearSearch,
                 ),
               ),
               if (groups.length > 1) ...[
                 const SizedBox(width: 8),
-                _ChannelPillButton(
-                  label: shown.name,
-                  expanded: _channelExpanded,
-                  onTap: () => setState(() => _channelExpanded = !_channelExpanded),
+                OverlayPortal(
+                  overlayLocation: OverlayChildLocation.rootOverlay,
+                  controller: _channelOverlay,
+                  overlayChildBuilder: (overlayContext) {
+                    final button = _channelButtonKey.currentContext?.findRenderObject();
+                    if (button is! RenderBox || !button.attached) return const SizedBox.shrink();
+                    return CustomSingleChildLayout(
+                      delegate: _ChannelDropdownLayout(
+                        anchor: button.localToGlobal(Offset.zero) & button.size,
+                        safeArea: MediaQuery.paddingOf(overlayContext),
+                      ),
+                      child: _ChannelDropdownList(
+                        groups: groups,
+                        shown: shown.id,
+                        onSelected: (id) {
+                          setState(() {
+                            _channel = id;
+                            _channelExpanded = false;
+                          });
+                          _channelOverlay.hide();
+                        },
+                      ),
+                    );
+                  },
+                  child: SizedBox(
+                    key: _channelButtonKey,
+                    child: _ChannelPillButton(label: shown.name, expanded: _channelExpanded, onTap: _toggleChannels),
+                  ),
                 ),
               ],
             ],
@@ -632,23 +676,7 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
                 const _EmptySearch()
               else
                 _modelGrid(filtered, selected, readOnly, ValueKey('${shown.id}:$query')),
-              // 下拉渠道列表
-              if (_channelExpanded && groups.length > 1)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: _ChannelDropdownList(
-                    groups: groups,
-                    shown: shown.id,
-                    onSelected: (id) {
-                      setState(() {
-                        _channel = id;
-                        _channelExpanded = false;
-                      });
-                    },
-                  ),
-                ),
+
             ],
           ),
           _effortSelector(efforts, selected, readOnly),
@@ -816,6 +844,41 @@ class _ChannelPillButton extends StatelessWidget {
   }
 }
 
+class _ChannelDropdownLayout extends SingleChildLayoutDelegate {
+  const _ChannelDropdownLayout({required this.anchor, required this.safeArea});
+
+  final Rect anchor;
+  final EdgeInsets safeArea;
+
+  static const _gap = 8.0;
+  static const _margin = 8.0;
+  static const _maxWidth = 320.0;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final room = math.max(0.0, anchor.left - _gap - safeArea.left - _margin);
+    final width = math.min(_maxWidth, room);
+    return BoxConstraints(
+      minWidth: width,
+      maxWidth: width,
+      maxHeight: math.max(0.0, constraints.maxHeight - safeArea.vertical - _margin * 2),
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final minY = safeArea.top + _margin;
+    final maxY = math.max(minY, size.height - safeArea.bottom - _margin - childSize.height);
+    final centeredY = anchor.center.dy - childSize.height / 2;
+    final y = math.max(minY, math.min(maxY, centeredY));
+    return Offset(math.max(safeArea.left + _margin, anchor.left - _gap - childSize.width), y);
+  }
+
+  @override
+  bool shouldRelayout(_ChannelDropdownLayout oldDelegate) =>
+      anchor != oldDelegate.anchor || safeArea != oldDelegate.safeArea;
+}
+
 /// 展开的渠道下拉列表:浮在模型卡上方,圆角矩形,带阴影。
 class _ChannelDropdownList extends StatelessWidget {
   const _ChannelDropdownList({required this.groups, required this.shown, required this.onSelected});
@@ -829,7 +892,6 @@ class _ChannelDropdownList extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
-    final quick = AppMotion.of(context, AppMotion.quick);
     return Container(
       decoration: ShapeDecoration(
         color: dark ? const Color(0xFF1C1C1E) : Colors.white,
@@ -844,9 +906,10 @@ class _ChannelDropdownList extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppShape.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             for (var i = 0; i < groups.length; i++) ...[
               if (i > 0)
                 Divider(
@@ -863,8 +926,9 @@ class _ChannelDropdownList extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 /// 下拉列表里的单个渠道项。
@@ -918,10 +982,12 @@ class _ChannelDropdownItem extends StatelessWidget {
 
 /// 搜索框:胶囊形状,左侧搜索图标,右侧清空按钮。
 class _SearchField extends StatelessWidget {
-  const _SearchField({required this.query, required this.onChanged});
+  const _SearchField({required this.controller, required this.query, required this.onChanged, required this.onClear});
 
+  final TextEditingController controller;
   final String query;
   final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -931,6 +997,7 @@ class _SearchField extends StatelessWidget {
     return SizedBox(
       height: 36,
       child: TextField(
+        controller: controller,
         onChanged: onChanged,
         style: theme.textTheme.bodyMedium,
         textAlignVertical: TextAlignVertical.center,
@@ -947,7 +1014,7 @@ class _SearchField extends StatelessWidget {
           suffixIcon: query.isEmpty
               ? null
               : GestureDetector(
-                  onTap: () => onChanged(''),
+                  onTap: onClear,
                   child: Icon(AppIcons.close, size: 16, color: colors.onSurfaceVariant),
                 ),
           hintText: appL10n.engineProviderSearchModels,

@@ -290,6 +290,8 @@ DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh -f x64 --keep-daemon
 DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh --dry-run -f all
 ```
 
+只改界面时不必重建运行时，再次出包的省时做法见 [高速构建](docs/testing/fast-builds.md)。
+
 ## 目录
 
 | 路径 | 内容 |

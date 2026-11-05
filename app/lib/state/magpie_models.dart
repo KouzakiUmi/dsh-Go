@@ -191,6 +191,20 @@ class MagpieProviderRoute {
   final List<ProviderModelSpec> models;
 }
 
+String magpieProviderOwnerSlug(String owner) {
+  final value = owner.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+  return value.isEmpty ? 'other' : value;
+}
+
+String magpieLegacySupplierRoute(MagpieProviderRoute route) {
+  final suffix = switch (route.kind) {
+    MagpieRouteKind.completions => '',
+    MagpieRouteKind.responses => '-responses',
+    MagpieRouteKind.anthropic => '-anthropic',
+  };
+  return 'magpie-${magpieProviderOwnerSlug(route.owner)}$suffix';
+}
+
 List<MagpieProviderRoute> groupMagpieProviderRoutes(
   Map<MagpieRouteKind, List<ProviderModelSpec>> grouped,
   Map<String, Map<String, Object?>> metadata,
@@ -210,10 +224,7 @@ List<MagpieProviderRoute> groupMagpieProviderRoutes(
   }
   final owners = buckets.keys.map((key) => key.split('\u0000').first).toSet().toList()
     ..sort((a, b) => a == 'auto' ? -1 : b == 'auto' ? 1 : a.compareTo(b));
-  String slug(String owner) {
-    final value = owner.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
-    return value.isEmpty ? 'other' : value;
-  }
+  String slug(String owner) => magpieProviderOwnerSlug(owner);
   String label(MagpieRouteKind kind) => switch (kind) {
     MagpieRouteKind.completions => '',
     MagpieRouteKind.responses => ' · Responses',

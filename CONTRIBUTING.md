@@ -90,7 +90,7 @@ node sdk/plugin-kit/scripts/sync-skill.mjs
 node sdk/plugin-kit/scripts/sync-skill.mjs --check
 ```
 
-需要 APK 验证时，使用 README 中的构建入口。涉及 Android 进程、PRoot、直接启动、手机操控或更新安装的改动，应说明测试的 ABI、Android 版本、启动方式和设备；桌面测试结果不能替代真机结果。
+需要 APK 验证时，使用 README 中的构建入口；只想出包验证界面时不必重建运行时，省时做法见 [高速构建](docs/testing/fast-builds.md)。涉及 Android 进程、PRoot、直接启动、手机操控或更新安装的改动，应说明测试的 ABI、Android 版本、启动方式和设备；桌面测试结果不能替代真机结果。
 
 `services/` 和 `infra/` 的线上检查、部署和发布脚本不属于普通贡献检查。修改配套服务时，先确认测试目标是自己的本地环境；不要用生产凭据运行示例。
 
