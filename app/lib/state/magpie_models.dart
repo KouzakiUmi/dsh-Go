@@ -126,7 +126,8 @@ ProviderModelSpec magpieModelSpec(
       .toList(growable: false);
   final owner = metadata['owned_by'] as String?;
   final rawName = (metadata['display_name'] as String?) ?? model.name ?? previous?.name ?? model.id;
-  final displayName = owner != null && owner.isNotEmpty ? '$owner · $rawName' : rawName;
+  final displayOwner = isAutoRoutingModelId(model.id) ? 'Auto Routing' : owner;
+  final displayName = displayOwner != null && displayOwner.isNotEmpty ? '$displayOwner · $rawName' : rawName;
   final spec = ProviderModelSpec(
     id: model.id,
     name: displayName,
@@ -169,16 +170,12 @@ MagpieRouteKind magpieRouteFor(Map<String, Object?> metadata) {
   return MagpieRouteKind.completions;
 }
 
-String magpieProviderModelId(DiscoveredModel model, Map<String, Map<String, Object?>> metadata) {
-  if (!model.id.startsWith('auto/')) return model.id;
-  final owner = metadata[model.id]?['owned_by'];
-  if (owner is String && owner.isNotEmpty && owner != 'auto') {
-    return '$owner/${model.id.substring(5)}';
-  }
-  return model.id;
-}
+bool isAutoRoutingModelId(String id) => id.startsWith('auto/');
+
+String magpieProviderModelId(DiscoveredModel model, Map<String, Map<String, Object?>> metadata) => model.id;
 
 String magpieOwnerOf(DiscoveredModel model, Map<String, Map<String, Object?>> metadata) {
+  if (isAutoRoutingModelId(model.id)) return 'auto';
   final owner = metadata[model.id]?['owned_by'];
   if (owner is String && owner.isNotEmpty && owner != 'auto') return owner;
   final separator = model.id.indexOf('/');
@@ -198,19 +195,46 @@ List<MagpieProviderRoute> groupMagpieProviderRoutes(
   Map<MagpieRouteKind, List<ProviderModelSpec>> grouped,
   Map<String, Map<String, Object?>> metadata,
 ) {
+  final buckets = <String, List<ProviderModelSpec>>{};
+  for (final kind in MagpieRouteKind.values) {
+    for (final model in grouped[kind]!) {
+      final owner = isAutoRoutingModelId(model.id)
+          ? 'auto'
+          : (metadata[model.id]?['owned_by'] as String?)?.trim().isNotEmpty == true
+              ? (metadata[model.id]!['owned_by'] as String).trim()
+              : model.id.contains('/')
+                  ? model.id.substring(0, model.id.indexOf('/'))
+                  : 'other';
+      buckets.putIfAbsent('$owner\u0000${kind.name}', () => []).add(model);
+    }
+  }
+  final owners = buckets.keys.map((key) => key.split('\u0000').first).toSet().toList()
+    ..sort((a, b) => a == 'auto' ? -1 : b == 'auto' ? 1 : a.compareTo(b));
+  String slug(String owner) {
+    final value = owner.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+    return value.isEmpty ? 'other' : value;
+  }
+  String suffix(MagpieRouteKind kind) => switch (kind) {
+    MagpieRouteKind.completions => '',
+    MagpieRouteKind.responses => '-responses',
+    MagpieRouteKind.anthropic => '-anthropic',
+  };
+  String label(MagpieRouteKind kind) => switch (kind) {
+    MagpieRouteKind.completions => '',
+    MagpieRouteKind.responses => ' · Responses',
+    MagpieRouteKind.anthropic => ' · Anthropic',
+  };
   return [
-    for (final kind in MagpieRouteKind.values)
-      MagpieProviderRoute(
-        'group',
-        kind,
-        'magpie-group${kind == MagpieRouteKind.completions ? '' : kind == MagpieRouteKind.responses ? '-responses' : '-anthropic'}',
-        'Magpie Group${kind == MagpieRouteKind.completions ? '' : kind == MagpieRouteKind.responses ? ' · Responses' : ' · Anthropic'}',
-        [...grouped[kind]!]..sort((a, b) {
-          final ownerA = metadata[a.id]?['owned_by'] as String? ?? a.id;
-          final ownerB = metadata[b.id]?['owned_by'] as String? ?? b.id;
-          return ownerA.compareTo(ownerB);
-        }),
-      ),
+    for (final owner in owners)
+      for (final kind in MagpieRouteKind.values)
+        if (buckets['$owner\u0000${kind.name}']?.isNotEmpty == true)
+          MagpieProviderRoute(
+            owner,
+            kind,
+            'magpie-${owner == 'auto' ? 'auto-routing' : slug(owner)}${suffix(kind)}',
+            '${owner == 'auto' ? 'Auto Routing' : 'Magpie · $owner'}${label(kind)}',
+            [...buckets['$owner\u0000${kind.name}']!]..sort((a, b) => a.id.compareTo(b.id)),
+          ),
   ];
 }
 
@@ -225,7 +249,7 @@ Map<MagpieRouteKind, List<ProviderModelSpec>> groupMagpieModels(
   final unique = <String, DiscoveredModel>{};
   final rawById = <String, Map<String, Object?>>{};
   for (final original in discovered) {
-    final id = magpieProviderModelId(original, metadata);
+    final id = original.id;
     unique[id] = DiscoveredModel(
       id: id,
       name: original.name,

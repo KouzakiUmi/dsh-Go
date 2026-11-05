@@ -1353,6 +1353,6 @@
     }
   },
   "magpieConnectApi": "按 API 导入",
-  "magpieConnectProvider": "导入 Magpie Group",
+  "magpieConnectProvider": "按 Provider 导入",
   "magpieConnectConflict": "Magpie 路由在导入期间发生变化，请检查后重试。"
 }

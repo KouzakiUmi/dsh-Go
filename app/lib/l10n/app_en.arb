@@ -5363,7 +5363,7 @@
   "magpieConnectSuccess": "Magpie connected with {count} models.",
   "magpieConnectFailed": "Couldn’t connect Magpie: {error}",
   "magpieConnectApi": "Import by API",
-  "magpieConnectProvider": "Import into Magpie Group",
+  "magpieConnectProvider": "Import by provider",
   "magpieConnectConflict": "The Magpie route changed during import. Please review it and try again.",
   "voiceSettingsTitle": "Voice input",
   "voiceModeAuto": "Automatic",
