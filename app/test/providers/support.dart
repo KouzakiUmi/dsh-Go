@@ -123,6 +123,7 @@ class FakeProviderBackend implements ProviderBackend {
     String? baseUrl,
     String? apiKeyEnv,
     List<ProviderModelSpec>? models,
+    int? streamIdleTimeoutMs,
     int? expectedRevision,
   }) async {
     calls.add((
@@ -134,6 +135,7 @@ class FakeProviderBackend implements ProviderBackend {
         'baseURL': ?baseUrl,
         'apiKeyEnv': ?apiKeyEnv,
         if (models != null) 'models': [for (final m in models) m.toJson()],
+        'streamIdleTimeoutMs': ?streamIdleTimeoutMs,
         'expectedRevision': ?expectedRevision,
       },
     ));
@@ -151,6 +153,7 @@ class FakeProviderBackend implements ProviderBackend {
       defaultContextWindow: old.defaultContextWindow,
       defaultMaxTokens: old.defaultMaxTokens,
       defaultInput: old.defaultInput,
+      streamIdleTimeoutMs: streamIdleTimeoutMs ?? old.streamIdleTimeoutMs,
     );
     revision++;
     return _settings;

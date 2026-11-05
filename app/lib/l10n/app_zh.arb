@@ -11724,6 +11724,26 @@
   "viewUiDialectKindOther": "这部分",
   "viewUiDialectInvalid": "这块内容在网页版查看",
   "viewUiDialectNote": "在网页版查看",
+  "magpieConnectTitle": "接入 Magpie Go",
+  "magpieConnectBody": "读取本机 Magpie 的模型，并在 DSH Go 中写入或更新 Magpie Provider。其他 Provider 保持不变。",
+  "magpieConnecting": "正在读取模型并接入 Magpie…",
+  "magpieConnectUnavailable": "没有从本机 Magpie 读到模型，请先启动 Magpie Go。",
+  "magpieConnectSuccess": "已接入 Magpie，发现 {count} 个模型。",
+  "@magpieConnectSuccess": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "magpieConnectFailed": "无法接入 Magpie：{error}",
+  "@magpieConnectFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "voiceSettingsTitle": "语音输入",
   "voiceModeAuto": "自动",
   "voiceModeSystem": "系统",

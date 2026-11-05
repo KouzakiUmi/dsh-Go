@@ -52,6 +52,7 @@ import '../state/sessions_state.dart' show currentSessionProvider;
 import '../ui/share_hosted/hosted_link_host.dart' show registerHostedLinks;
 import 'page_links.dart' show pageLinkResolverProvider, registerPageLinks;
 import 'plugin_links.dart' show registerPluginLinks;
+import 'magpie_links.dart' show registerMagpieLinks;
 
 import '../l10n/l10n.dart';
 
@@ -343,6 +344,7 @@ class _LinkHostState extends ConsumerState<LinkHost> {
   late final VoidCallback _offHosted;
   late final VoidCallback _offPlugins;
   late final VoidCallback _offPages;
+  late final VoidCallback _offMagpie;
 
   @override
   void initState() {
@@ -358,6 +360,9 @@ class _LinkHostState extends ConsumerState<LinkHost> {
       session: () => ref.read(currentSessionProvider),
       page: ref.read(pageLinkResolverProvider),
     );
+    // Magpie Go's one-click provider link: confirmation, then the same
+    // ProviderBackend writes used by the native provider forms.
+    _offMagpie = registerMagpieLinks(_router, ref);
     // After the first frame: the home route is laid out before a sheet opens.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _router.attach(context, toast: _toast);
@@ -374,6 +379,7 @@ class _LinkHostState extends ConsumerState<LinkHost> {
     _offHosted();
     _offPlugins();
     _offPages();
+    _offMagpie();
     _router.detach(context);
     super.dispose();
   }

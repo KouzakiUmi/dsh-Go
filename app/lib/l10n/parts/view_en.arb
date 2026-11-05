@@ -342,5 +342,25 @@
   "viewUiDialectKindMap": "Map",
   "viewUiDialectKindOther": "This part",
   "viewUiDialectInvalid": "This block shows in DSH Web",
-  "viewUiDialectNote": "Shown in DSH Web"
+  "viewUiDialectNote": "Shown in DSH Web",
+  "magpieConnectTitle": "Connect Magpie Go",
+  "magpieConnectBody": "Read the models from the local Magpie and create or update the Magpie provider in DSH Go. Other providers stay unchanged.",
+  "magpieConnecting": "Reading models and connecting Magpie…",
+  "magpieConnectUnavailable": "No models were returned by the local Magpie. Start Magpie Go first.",
+  "magpieConnectSuccess": "Magpie connected with {count} models.",
+  "@magpieConnectSuccess": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "magpieConnectFailed": "Couldn’t connect Magpie: {error}",
+  "@magpieConnectFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }

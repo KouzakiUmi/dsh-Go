@@ -17782,6 +17782,28 @@ class L10nZh extends L10n {
   String get viewUiDialectNote => '在网页版查看';
 
   @override
+  String get magpieConnectTitle => '接入 Magpie Go';
+
+  @override
+  String get magpieConnectBody => '读取本机 Magpie 的模型，并在 DSH Go 中写入或更新 Magpie Provider。其他 Provider 保持不变。';
+
+  @override
+  String get magpieConnecting => '正在读取模型并接入 Magpie…';
+
+  @override
+  String get magpieConnectUnavailable => '没有从本机 Magpie 读到模型，请先启动 Magpie Go。';
+
+  @override
+  String magpieConnectSuccess(int count) {
+    return '已接入 Magpie，发现 $count 个模型。';
+  }
+
+  @override
+  String magpieConnectFailed(String error) {
+    return '无法接入 Magpie：$error';
+  }
+
+  @override
   String get voiceSettingsTitle => '语音输入';
 
   @override
