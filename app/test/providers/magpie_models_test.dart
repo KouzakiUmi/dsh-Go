@@ -77,6 +77,21 @@ void main() {
     expect(adaptiveThinkingModel('deepseek-v4.1-flash'), isFalse);
   });
 
+  test('replaces auto aliases with owned provider ids and deduplicates', () {
+    const models = [
+      DiscoveredModel(id: 'auto/glm-5.3-flash'),
+      DiscoveredModel(id: 'volcengine/glm-5.3-flash'),
+      DiscoveredModel(id: 'auto/claude-opus-5-5'),
+    ];
+    final grouped = groupMagpieModels(models, {
+      'auto/glm-5.3-flash': {'owned_by': 'volcengine'},
+      'volcengine/glm-5.3-flash': {},
+      'auto/claude-opus-5-5': {'owned_by': 'copilot', 'native_endpoints': ['/v1/messages']},
+    });
+    expect(grouped[MagpieRouteKind.completions]!.map((m) => m.id), ['volcengine/glm-5.3-flash']);
+    expect(grouped[MagpieRouteKind.anthropic]!.single.id, 'copilot/claude-opus-5-5');
+  });
+
   test('accepts only the exact Magpie provider deep link', () {
     expect(isMagpieProviderLink(Uri.parse('dshgo://providers/magpie')), isTrue);
     expect(isMagpieProviderLink(Uri.parse('dshgo://providers/magpie?key=x')), isFalse);

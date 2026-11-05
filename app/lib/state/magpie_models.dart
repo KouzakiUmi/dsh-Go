@@ -141,6 +141,15 @@ MagpieRouteKind magpieRouteFor(Map<String, Object?> metadata) {
   return MagpieRouteKind.completions;
 }
 
+String magpieProviderModelId(DiscoveredModel model, Map<String, Map<String, Object?>> metadata) {
+  if (!model.id.startsWith('auto/')) return model.id;
+  final owner = metadata[model.id]?['owned_by'];
+  if (owner is String && owner.isNotEmpty && owner != 'auto') {
+    return '$owner/${model.id.substring(5)}';
+  }
+  return model.id;
+}
+
 Map<MagpieRouteKind, List<ProviderModelSpec>> groupMagpieModels(
   List<DiscoveredModel> discovered,
   Map<String, Map<String, Object?>> metadata, {
@@ -149,8 +158,21 @@ Map<MagpieRouteKind, List<ProviderModelSpec>> groupMagpieModels(
   final grouped = <MagpieRouteKind, List<ProviderModelSpec>>{
     for (final kind in MagpieRouteKind.values) kind: [],
   };
-  for (final model in discovered) {
-    final raw = metadata[model.id] ?? const <String, Object?>{};
+  final unique = <String, DiscoveredModel>{};
+  final rawById = <String, Map<String, Object?>>{};
+  for (final original in discovered) {
+    final id = magpieProviderModelId(original, metadata);
+    unique[id] = DiscoveredModel(
+      id: id,
+      name: original.name,
+      contextWindow: original.contextWindow,
+      maxTokens: original.maxTokens,
+      inputModalities: original.inputModalities,
+    );
+    rawById[id] = metadata[id] ?? metadata[original.id] ?? rawById[id] ?? const <String, Object?>{};
+  }
+  for (final model in unique.values) {
+    final raw = rawById[model.id] ?? const <String, Object?>{};
     final kind = magpieRouteFor(raw);
     final previous = <String, ProviderModelSpec>{
       for (final old in existing[kind] ?? const <ProviderModelSpec>[]) old.id: old,
