@@ -121,7 +121,9 @@ ProviderModelSpec magpieModelSpec(
   final metadataInput = rawModalities is Map && rawModalities['input'] is List
       ? (rawModalities['input'] as List).whereType<String>().toList(growable: false)
       : null;
-  final input = model.inputModalities ?? metadataInput ?? previous?.input;
+  final input = (model.inputModalities ?? metadataInput ?? previous?.input)
+      ?.where((kind) => kind == 'text' || kind == 'image')
+      .toList(growable: false);
   final owner = metadata['owned_by'] as String?;
   final rawName = (metadata['display_name'] as String?) ?? model.name ?? previous?.name ?? model.id;
   final displayName = owner != null && owner.isNotEmpty ? '$owner · $rawName' : rawName;
