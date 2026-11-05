@@ -32276,11 +32276,59 @@ abstract class L10n {
   /// **'按 Provider 导入'**
   String get magpieConnectProvider;
 
+  /// No description provided for @magpieConnectClean.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入前清除 Magpie Provider'**
+  String get magpieConnectClean;
+
+  /// No description provided for @magpieConnectCleanHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除全部 Magpie 相关路由后重新导入，用于清理上次导入留下的问题'**
+  String get magpieConnectCleanHint;
+
   /// No description provided for @magpieConnectConflict.
   ///
   /// In zh, this message translates to:
   /// **'Magpie 路由在导入期间发生变化，请检查后重试。'**
   String get magpieConnectConflict;
+
+  /// No description provided for @magpieProgressDiscover.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取模型列表…'**
+  String get magpieProgressDiscover;
+
+  /// No description provided for @magpieProgressReadMeta.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取模型详情…'**
+  String get magpieProgressReadMeta;
+
+  /// No description provided for @magpieProgressWriteRoute.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在写入 {route}（{count} 个模型）'**
+  String magpieProgressWriteRoute(String route, int count);
+
+  /// No description provided for @magpieProgressRemoveRoute.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在移除 {route}'**
+  String magpieProgressRemoveRoute(String route);
+
+  /// No description provided for @magpieProgressSaveKey.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存凭据…'**
+  String get magpieProgressSaveKey;
+
+  /// No description provided for @magpieProgressSteps.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {done} / {total} 步'**
+  String magpieProgressSteps(int done, int total);
 
   /// No description provided for @voiceSettingsTitle.
   ///

@@ -17810,7 +17810,37 @@ class L10nZh extends L10n {
   String get magpieConnectProvider => '按 Provider 导入';
 
   @override
+  String get magpieConnectClean => '导入前清除 Magpie Provider';
+
+  @override
+  String get magpieConnectCleanHint => '删除全部 Magpie 相关路由后重新导入，用于清理上次导入留下的问题';
+
+  @override
   String get magpieConnectConflict => 'Magpie 路由在导入期间发生变化，请检查后重试。';
+
+  @override
+  String get magpieProgressDiscover => '正在读取模型列表…';
+
+  @override
+  String get magpieProgressReadMeta => '正在读取模型详情…';
+
+  @override
+  String magpieProgressWriteRoute(String route, int count) {
+    return '正在写入 $route（$count 个模型）';
+  }
+
+  @override
+  String magpieProgressRemoveRoute(String route) {
+    return '正在移除 $route';
+  }
+
+  @override
+  String get magpieProgressSaveKey => '正在保存凭据…';
+
+  @override
+  String magpieProgressSteps(int done, int total) {
+    return '第 $done / $total 步';
+  }
 
   @override
   String get voiceSettingsTitle => '语音输入';

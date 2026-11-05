@@ -18823,7 +18823,38 @@ class L10nEn extends L10n {
   String get magpieConnectProvider => 'Import by provider';
 
   @override
+  String get magpieConnectClean => 'Remove Magpie providers first';
+
+  @override
+  String get magpieConnectCleanHint =>
+      'Deletes every Magpie-managed route before importing, to clear what an earlier import left behind';
+
+  @override
   String get magpieConnectConflict => 'The Magpie route changed during import. Please review it and try again.';
+
+  @override
+  String get magpieProgressDiscover => 'Reading the model list…';
+
+  @override
+  String get magpieProgressReadMeta => 'Reading model details…';
+
+  @override
+  String magpieProgressWriteRoute(String route, int count) {
+    return 'Writing $route ($count models)';
+  }
+
+  @override
+  String magpieProgressRemoveRoute(String route) {
+    return 'Removing $route';
+  }
+
+  @override
+  String get magpieProgressSaveKey => 'Saving the credential…';
+
+  @override
+  String magpieProgressSteps(int done, int total) {
+    return 'Step $done / $total';
+  }
 
   @override
   String get voiceSettingsTitle => 'Voice input';
