@@ -10,7 +10,7 @@ import { ID, LIMITS, PKG, PROTOCOL, TONES, ICON } from "./limits.js";
 import { parseManifest, renderPlugin } from "./manifest.js";
 import {
   call, chars, cleanLine, compareSemver, deepEqual, errorText, isPlainObject, mergeApply, mergeDiff,
-  normalizeScope, scopeMatches, shortHash, toJson, truncateChars, withoutNulls,
+  normalizeScope, sanitizeNotes, scopeMatches, shortHash, toJson, truncateChars, withoutNulls,
 } from "./util.js";
 
 const TRACKER = Symbol.for("cordis.tracker");
@@ -405,7 +405,7 @@ export class NativeCore {
     const regs = this.regs.get(pkg);
     if (regs?.[kind].get(id)?.token !== token) return;
     regs[kind].delete(id);
-    if (kind === "panels" || kind === "strips") for (const feed of [...this.feeds.values()]) if (feed.pkg === pkg && feed.id === id) feed.stop("not-found");
+    if (kind === "panels" || kind === "strips" || kind === "notes") for (const feed of [...this.feeds.values()]) if (feed.pkg === pkg && feed.id === id) feed.stop("not-found");
     this.regsVersion++;
     this.capabilityChanged?.();
     this.#scheduleChanged();
@@ -485,21 +485,6 @@ export class NativeCore {
 }
 
 /** Strip data -> {text, icon?, tone?} | null, or undefined when malformed. */
-/** `{ turnId: { text, tone? } }` → the same, cut to size; the newest turns when there are too many. */
-function sanitizeNotes(d) {
-  if (d === null || d === undefined) return null;
-  if (!isPlainObject(d)) return undefined;
-  const out = {};
-  for (const [turn, note] of Object.entries(d).slice(-LIMITS.turnNotesPerFeed)) {
-    if (!isPlainObject(note) || typeof note.text !== "string" || turn.length > 64) continue;
-    const text = cleanLine(note.text);
-    if (text === "") continue;
-    out[turn] = { text: chars(text) > LIMITS.textChars.turnNote ? truncateChars(text, LIMITS.textChars.turnNote) : text };
-    if (TONES.includes(note.tone)) out[turn].tone = note.tone;
-  }
-  return out;
-}
-
 function sanitizeStrip(d) {
   if (d === null || d === undefined) return null;
   if (!isPlainObject(d)) return undefined;

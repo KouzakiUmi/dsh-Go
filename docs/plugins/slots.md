@@ -39,7 +39,7 @@
 | `minApp` | 否 | `"x.y.z"`。App 低于它时原生部分不显示 |
 | `title` | 否 | 插件显示名，≤ 24 字；缺省用包名 |
 | `icon` | 否 | 图标名（见下）；不认识的画通用图标 |
-| `wants` | 否 | 点按时要附带的内容：`draft`（输入框文字）、`clipboard`（剪贴板）——只在 `composer.actions`；`message`（被长按的回复正文）——只在 `message.actions`。App 在第一次点按前问用户一次 |
+| `wants` | 否 | 点按时要附带的内容：`draft`（输入框文字）、`clipboard`（剪贴板）——只在 `composer.actions` 和 `composer.tools`；`message`（被长按的回复正文）——只在 `message.actions`。App 在第一次点按前问用户一次 |
 | `assets` | 否 | 图片目录（相对包目录），给 `image` 组件用 |
 | `contributes` | 是 | 键是插槽名，值是数组 |
 
@@ -74,7 +74,7 @@ export function apply(ctx) {
 | `strip(id, dataFn)` | 状态条的内容：`dataFn(scope, emit, caps)` 里 `emit({ text, icon?, tone? })`，返回取消函数 |
 | `panel(id, { view, data?, actions? })` | 面板：`view` 是视图或 `(scope, caps) => 视图`；`data(scope, emit, caps)` 推数据；`actions` 处理视图里的点按 |
 | `turnNote(id, dataFn)` | 回合尾注：`dataFn(scope, emit, caps)` 里 `emit({ [回合序号]: { text, tone? } })`，返回取消函数。见[较新的位置](#较新的位置) |
-| `refresh(id, scope?)` | 视图结构变了，让 App 重新取 |
+| `refresh(id, scope?)` | 面板的视图结构变了，让 App 重新取。状态条和回合尾注没有视图，继续 `emit` 就行 |
 
 **回调参数**
 
@@ -118,8 +118,8 @@ export function apply(ctx) {
 
 | 插槽 | 原生位置 | 条目字段 | 每插件 | 文字上限 | 点按 |
 |---|---|---|---|---|---|
-| `composer.tools` | 输入框加号面板，和附件磁贴同一网格 | `id`、`label`、`icon?`、`effect?`、`panel?` | 2（整个面板最多 8 个） | `label` 8 字 | `panel` 或 `effect` 由 App 直接执行；都没有就 invoke `on(id)`。`panel` 和 `effect` 只能写一个 |
-| `session.actions` | 右侧栏「信息」的操作行，右侧显示插件名 | `id`、`label`、`icon?`、`effect?` | 2 | `label` 12 字 | 同胶囊，`scope` 带 `sessionId` |
+| `composer.tools` | 输入框加号面板，和附件磁贴同一网格 | `id`、`label`、`icon?`、`effect?`、`panel?`、`requires?` | 2（整个面板最多 8 个） | `label` 8 字 | `panel` 或 `effect` 由 App 直接执行；都没有就 invoke `on(id)`。`panel` 和 `effect` 只能写一个 |
+| `session.actions` | 右侧栏「信息」的操作行，右侧显示插件名 | `id`、`label`、`icon?`、`effect?`、`requires?` | 2 | `label` 12 字 | 同胶囊，`scope` 带 `sessionId` |
 | `turn.note` | 每轮回合脚注的末尾 | `id` | 1（每轮最多显示 2 个插件） | 每段 16 字 | 不能点；点脚注仍是打开轨迹 |
 
 ```jsonc
@@ -140,7 +140,9 @@ ctx.dshGo.turnNote('cost', (scope, emit) => watchCosts(scope.sessionId, (costs) 
 
 - 每次最多 64 个回合，超出时留最新的；文字超过 16 字会被截断；格式不对的条目被丢弃。
 - 脚注放不下时最先省掉尾注，时长、步数和花费优先。
-- 没有声明 `turn.note` 的插件不会产生任何订阅。
+- `tone` 决定这段文字的颜色，每个插件各算各的；不写就和脚注同色。
+- 没有声明 `turn.note` 的插件不会产生任何订阅。一段对话最多跟前 8 个开着尾注的插件，排在后面的不显示。
+- 较旧的桥接没有 `turnNote`，直接调用会让后面的注册都走不到。要兼容就先判断：`if (typeof ctx.dshGo.turnNote === 'function')`。
 
 ## 静态面板
 

@@ -72,6 +72,7 @@ try {
         { id: 'agent-default-model', config: { provider: 'deepseek-official', model: 'deepseek-flash' } },
         { id: 'session-persistence-jsonl', config: { root: join(home, 'sessions'), compression: 'none' } },
         { id: 'sandbox-policy', config: { mode: 'danger-full-access', workspaceRoot: workspace } },
+        { id: 'permission', config: { defaultPreset: 'danger-full-access' } },
         { id: 'fs-sandbox', config: { cwd: workspace } },
         { id: 'tool-executor-native', disabled: mode !== 'native' }, { id: 'tool-executor-ptc', disabled: mode !== 'ptc' },
         { id: 'ptc-runtime', config: { executionMode: 'per-call' } });
@@ -82,8 +83,8 @@ try {
       let stdout = '', stderr = '';
       child.stdout.on('data', chunk => stdout += chunk); child.stderr.on('data', chunk => stderr += chunk);
       const timer = setTimeout(() => child.kill('SIGKILL'), 60000);
-      const [code] = await once(child, 'exit'); clearTimeout(timer);
-      assert.equal(code, 0, stderr); assert.equal(calls, 1, stdout + stderr); assert.equal(actions, decision === 'allowed' ? 1 : 0); assert.ok(hello >= 1);
+      const [code] = await once(child, 'close'); clearTimeout(timer);
+      assert.equal(code, 0, stderr); assert.doesNotMatch(stderr, /did not activate/, stderr); assert.equal(calls, 1, stdout + stderr); assert.equal(actions, decision === 'allowed' ? 1 : 0); assert.ok(hello >= 1);
       assert.equal(mock.requests.length, 2);
       const first = mock.requests[0].body;
       if (mode === 'native') assert.ok(first.tools.some(tool => tool.name === 'mcp__phone__tap'));

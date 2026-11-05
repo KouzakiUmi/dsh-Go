@@ -137,12 +137,16 @@ Future<void> openNativePanel(BuildContext context, NativePanel panel, {String? s
   return showAppSheet<void>(
     context,
     isScrollControlled: true,
-    builder: (sheet) => SafeArea(
-      top: false,
-      child: SingleChildScrollView(
-        key: ValueKey('native-panel-sheet|${panel.package}|${panel.id}'),
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-        child: NativePanelView(panel: panel, sessionId: sessionId),
+    builder: (sheet) => Padding(
+      // A v2 panel can have fields: the sheet rises with the keyboard.
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(sheet).bottom),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          key: ValueKey('native-panel-sheet|${panel.package}|${panel.id}'),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          child: NativePanelView(panel: panel, sessionId: sessionId),
+        ),
       ),
     ),
   );

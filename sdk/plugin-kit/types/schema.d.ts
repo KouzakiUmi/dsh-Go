@@ -571,7 +571,7 @@ export interface Manifest {
   /** Display name, <= 24 characters after locale resolution. */
   title?: ManifestText
   icon?: ManifestIconName
-  /** Content attached to taps: draft/clipboard on composer.actions, message on message.actions. */
+  /** Content attached to taps: draft/clipboard on composer.actions and composer.tools, message on message.actions. */
   wants?: Array<"draft" | "clipboard" | "message">
   /** Image directory served by GET /dsh-go/v1/assets/<pkg>/<path>. */
   assets?: ManifestRelativePath

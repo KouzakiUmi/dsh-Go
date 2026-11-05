@@ -112,6 +112,7 @@ const words = (lang) => WORDS[lang === 'en' ? 'en' : 'zh']
 
 // ── manifest ──────────────────────────────────────────────────────────────
 
+const FEED_SETTLE_MS = 2000
 const LOCALES = ['zh-CN', 'en-US']
 
 /** App-side icon problems (the app draws unknown names as its default glyph). */
@@ -294,9 +295,17 @@ async function loadIn(pkgJson, dir, w) {
       }
     }
   }
-  for (const strip of [...host.parsed.items['composer.strip'], ...(host.parsed.items['turn.note'] ?? [])]) {
-    const feed = host.subscribe(strip.id, { sessionId: 'check-session' })
-    for (const e of feed.errors) notes.push({ path: `/runtime/${strip.id}`, code: 'load', severity: 'error', message: w.stripEmit(strip.id, e) })
+  const feeds = [...host.parsed.items['composer.strip'], ...(host.parsed.items['turn.note'] ?? [])]
+    .map((item) => host.subscribe(item.id, { sessionId: 'check-session' }))
+  // A data function may be async: wait for it to finish starting, but not for one that never does.
+  let timer
+  await Promise.race([
+    Promise.all(feeds.map((feed) => feed.settled)),
+    new Promise((done) => { timer = setTimeout(done, FEED_SETTLE_MS) }),
+  ])
+  clearTimeout(timer)
+  for (const feed of feeds) {
+    for (const e of feed.errors) notes.push({ path: `/runtime/${feed.id}`, code: 'load', severity: 'error', message: w.stripEmit(feed.id, e) })
     feed.stop()
   }
   host.dispose()

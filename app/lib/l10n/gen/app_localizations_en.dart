@@ -14203,6 +14203,32 @@ class L10nEn extends L10n {
   String get remoteNetworkObservedAt => 'Last checked';
 
   @override
+  String get remoteNetworkLocalIpVersion => 'Phone ICE IP version';
+
+  @override
+  String get remoteNetworkRemoteIpVersion => 'Host ICE IP version';
+
+  @override
+  String get remoteNetworkIceProtocol => 'ICE protocol';
+
+  @override
+  String get remoteTransferSettings => 'Remote transfer';
+
+  @override
+  String get remoteCompactHistory => 'Compact history';
+
+  @override
+  String get remoteErrHistoryModeChanged =>
+      'The Host no longer supports compact history. Switch to another host and back, or restart the app, to reload history.';
+
+  @override
+  String get remoteCompactHistoryHint =>
+      'Reduces historical tool details on supporting DSH Remote Hosts; live replies and approvals stay unchanged. Switch hosts or restart the app to apply. Older Hosts keep full history.';
+
+  @override
+  String get searchKwRemoteCompactHistory => 'compact slim lite history tools transfer bandwidth remote';
+
+  @override
   String get stateWorkspaceFilesHint => 'Files uploaded to the current workspace:';
 
   @override
@@ -18087,6 +18113,9 @@ class L10nEn extends L10n {
 
   @override
   String get viewEmptySwitchWorkspace => 'Switch workspace';
+
+  @override
+  String get viewEmptyHostDefaultDirectory => 'Host default folder';
 
   @override
   String get viewScheduleTitle => 'Automations';

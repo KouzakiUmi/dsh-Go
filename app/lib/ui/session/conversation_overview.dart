@@ -117,23 +117,29 @@ class _Row extends StatelessWidget {
         customBorder: Squircle.border(AppShape.md),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 44),
-          child: Row(
-            children: [
-              Icon(icon, size: 18, color: muted),
-              const SizedBox(width: 10),
-              Text(label, style: theme.textTheme.bodyMedium),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                  style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+          child: LayoutBuilder(
+            builder: (context, constraints) => Row(
+              children: [
+                Icon(icon, size: 18, color: muted),
+                const SizedBox(width: 10),
+                // A plugin's label at a large text size: it stops short of pushing the value out.
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.6),
+                  child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium),
                 ),
-              ),
-              if (onTap != null) Icon(AppIcons.expand, size: 16, color: muted),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+                  ),
+                ),
+                if (onTap != null) Icon(AppIcons.expand, size: 16, color: muted),
+              ],
+            ),
           ),
         ),
       ),

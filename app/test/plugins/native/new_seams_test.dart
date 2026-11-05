@@ -3,14 +3,16 @@
 // that opens as a sheet. Older bridges send none of them.
 
 import 'package:dsh_app/plugins/native/native_model.dart';
+import 'package:dsh_app/plugins/native/native_state.dart';
 import 'package:dsh_app/plugins/native/native_surface.dart';
 import 'package:dsh_app/ui/chat/widgets/plus_panel.dart';
 import 'package:dsh_app/ui/chat/widgets/turn_footnote.dart';
 import 'package:dsh_app/ui/plugins/native/native_panel.dart';
 import 'package:dsh_app/ui/plugins/native/native_plugin_section.dart';
+import 'package:dsh_app/ui/theme/theme.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' show Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart' show Consumer, ProviderContainer, ProviderScope;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../chat/support/harness.dart';
@@ -176,9 +178,44 @@ void main() {
       expect(find.byKey(const ValueKey('native-panel-sheet|p|s')), findsOneWidget);
       expect(find.byType(NativePanelPage), findsNothing);
     });
+
+    testWidgets('a sheet rises with the keyboard', (tester) async {
+      usePhoneView(tester);
+      const sheet = NativePanel(package: 'p', id: 's', title: '弹层', sheet: true);
+      await tester.pumpWidget(
+        testApp(
+          Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(onPressed: () => openNativePanel(context, sheet), child: const Text('打开')),
+            ),
+          ),
+          overrides: nativeOverrides(FakeBridge(contributions([_plugin()]))),
+        ),
+      );
+      await tester.tap(find.text('打开'));
+      await tester.pumpAndSettle();
+      final content = find.byKey(const ValueKey('native-panel-sheet|p|s'));
+      final resting = tester.getBottomLeft(content).dy;
+      tester.view.viewInsets = FakeViewPadding(bottom: 300 * tester.view.devicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+      expect(tester.getBottomLeft(content).dy, moreOrLessEquals(resting - 300, epsilon: 1));
+    });
   });
 
   group('the plugin\'s own page', () {
+    test('covers the bundle\'s package and each of its components\'', () {
+      const bundle = PluginBundle(
+        name: 'a',
+        rows: [
+          PluginBundleRow(rowId: '1', moduleName: 'a'),
+          PluginBundleRow(rowId: '2', moduleName: 'b'),
+          PluginBundleRow(rowId: '3', moduleName: ''),
+        ],
+      );
+      expect(nativePackagesOf(bundle), ['a', 'b']);
+    });
+
     testWidgets('shows what asked for it, and nothing when switched off', (tester) async {
       usePhoneView(tester);
       final row = _plugin(
@@ -222,7 +259,122 @@ void main() {
       expect(TurnFootnote.variants(trace()), variants.skip(1).toList());
     });
 
-    Widget note() => Consumer(builder: (context, ref, _) => Text(ref.watch(nativeTurnNoteProvider(('s1', 3))) ?? '没有'));
+    Widget note() =>
+        Consumer(builder: (context, ref, _) => Text(ref.watch(nativeTurnNoteProvider(('s1', 3)))?.text ?? '没有'));
+    const noteKey = NativeSurfaceKey(
+      package: 'p',
+      surface: NativeSurface.turnNote,
+      id: 'cost',
+      scope: DshGoScope(sessionId: 's1'),
+    );
+
+    /// A note showing on turn 3, from revision 1.
+    Future<(FakeBridge, ProviderContainer, Object?)> showing(WidgetTester tester) async {
+      final bridge = FakeBridge(
+        contributions([
+          _plugin(
+            notes: [
+              {'id': 'cost', 'ready': true},
+            ],
+          ),
+        ]),
+      );
+      await tester.pumpWidget(testApp(note(), overrides: nativeOverrides(bridge)));
+      await pumpFrames(tester);
+      final sub = bridge.socket.sent.lastWhere((m) => m['t'] == 'sub')['sub'];
+      bridge.socket.push({
+        't': 'data',
+        'sub': sub,
+        'rev': '1',
+        'data': {
+          '3': {'text': '¥0.03'},
+        },
+      });
+      await pumpFrames(tester);
+      expect(find.text('¥0.03'), findsOneWidget);
+      return (bridge, ProviderScope.containerOf(tester.element(find.byType(Consumer))), sub);
+    }
+
+    testWidgets('a refresh for a note reads no view and costs it nothing', (tester) async {
+      final (bridge, container, sub) = await showing(tester);
+      bridge.socket.push({'t': 'stale', 'sub': sub});
+      await pumpFrames(tester);
+      expect(container.read(nativeSurfaceProvider(noteKey)).failure, isNull);
+      expect(find.text('¥0.03'), findsOneWidget);
+    });
+
+    testWidgets('a new stream the bridge only answers `sync` on leaves the note where it was', (tester) async {
+      final (bridge, container, _) = await showing(tester);
+      container.invalidate(nativeStreamProvider);
+      await pumpFrames(tester);
+      final again = bridge.socket.sent.lastWhere((m) => m['t'] == 'sub');
+      expect(again['rev'], '1');
+      bridge.socket.push({'t': 'sync', 'sub': again['sub'], 'rev': '1'});
+      await pumpFrames(tester);
+      expect(find.text('¥0.03'), findsOneWidget);
+    });
+
+    testWidgets('a patch after following again builds on what the note holds', (tester) async {
+      final (bridge, container, _) = await showing(tester);
+      container.read(nativeSurfaceProvider(noteKey).notifier).refresh();
+      await pumpFrames(tester);
+      final again = bridge.socket.sent.lastWhere((m) => m['t'] == 'sub');
+      expect(again['rev'], '1');
+      bridge.socket.push({
+        't': 'patch',
+        'sub': again['sub'],
+        'base': '1',
+        'rev': '2',
+        'merge': {
+          '4': {'text': '新的'},
+        },
+      });
+      await pumpFrames(tester);
+      expect(find.text('¥0.03'), findsOneWidget);
+    });
+
+    testWidgets('however many plugins have notes, panels and strips keep their subscriptions', (tester) async {
+      final bridge = FakeBridge(
+        contributions([
+          for (var i = 0; i < NativeLimits.turnNoteFeeds + 4; i++)
+            {
+              ..._plugin(
+                notes: [
+                  {'id': 'cost', 'ready': true},
+                ],
+              ),
+              'pkg': 'p$i',
+            },
+        ]),
+      );
+      await tester.pumpWidget(testApp(note(), overrides: nativeOverrides(bridge)));
+      await pumpFrames(tester);
+      expect(bridge.socket.sent.where((m) => m['t'] == 'sub'), hasLength(NativeLimits.turnNoteFeeds));
+    });
+
+    testWidgets('each note is in the tone its plugin asked for, the rest as it always is', (tester) async {
+      usePhoneView(tester);
+      await tester.pumpWidget(
+        testApp(
+          Scaffold(
+            body: Center(
+              child: TurnFootnote(
+                trace: trace(),
+                notes: const NativeTurnNotes([(text: '超预算', tone: 'warn'), (text: '省了', tone: null)]),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final colors = <String, Color?>{};
+      tester.widget<Text>(find.byType(Text)).textSpan!.visitChildren((span) {
+        if (span is TextSpan && span.text != null) colors[span.text!] = span.style?.color;
+        return true;
+      });
+      expect(colors['超预算'], DshColors.of(tester.element(find.byType(Text))).warning);
+      expect(colors['省了'], isNull);
+    });
 
     testWidgets('a conversation with no such plugin has none, and subscribes to nothing', (tester) async {
       final bridge = FakeBridge(contributions([_plugin()]));

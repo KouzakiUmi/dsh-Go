@@ -3,7 +3,7 @@
 // problems, the last view's size, the last tap's round trip — that opens the
 // problems with their paths. Plugins without a native part get nothing here.
 
-import 'package:dsh_client/dsh_client.dart' show DshGoPanel;
+import 'package:dsh_client/dsh_client.dart' show DshGoPanel, PluginBundle;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -38,6 +38,13 @@ IconData _surfaceIcon(NativeSurface surface) => switch (surface) {
   NativeSurface.turnNote => AppIcons.info,
 };
 
+/// The packages a bundle's native parts can sit in: its own, and each component's.
+List<String> nativePackagesOf(PluginBundle bundle) => {
+  bundle.name,
+  for (final row in bundle.rows)
+    if (row.moduleName.isNotEmpty) row.moduleName,
+}.toList();
+
 /// The panels [package] asked to show on its own detail page.
 class NativePluginPanels extends ConsumerWidget {
   const NativePluginPanels({super.key, required this.package});
@@ -70,9 +77,12 @@ class NativePluginPanels extends ConsumerWidget {
 /// The rows in the plugin's sheet; nothing for a plugin without a native
 /// part.
 class NativePluginSection extends ConsumerWidget {
-  const NativePluginSection({super.key, required this.package});
+  const NativePluginSection({super.key, required this.package, this.named = false});
 
   final String package;
+
+  /// A component on its bundle's page: says whose it is, or two of these would read the same.
+  final bool named;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -137,7 +147,9 @@ class NativePluginSection extends ConsumerWidget {
           ListPageRow(
             key: const ValueKey('native-status'),
             icon: AppIcons.diagnostics,
-            title: l10n.plugslotsNativeUi,
+            title: named
+                ? '${ref.watch(nativePluginTitleProvider(package))} · ${l10n.plugslotsNativeUi}'
+                : l10n.plugslotsNativeUi,
             subtitle: stats.isEmpty ? null : stats.join(' · '),
             value: status,
             chevron: true,

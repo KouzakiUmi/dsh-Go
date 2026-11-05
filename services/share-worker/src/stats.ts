@@ -85,12 +85,14 @@ export class StatsSalt {
   constructor(private readonly state: DurableObjectState) {}
 
   async fetch(): Promise<Response> {
-    const day = statsDay(this.now());
+    // The saved day and its expiry must agree even when storage I/O crosses midnight.
+    const now = this.now();
+    const day = statsDay(now);
     let stored = await this.state.storage.get<Salt>('salt');
     if (!stored || stored.day !== day) {
       stored = { day, salt: base64url(crypto.getRandomValues(new Uint8Array(32))) };
       await this.state.storage.put('salt', stored);
-      await this.state.storage.setAlarm(nextDayStart(this.now()));
+      await this.state.storage.setAlarm(nextDayStart(now));
     }
     return new Response(JSON.stringify(stored), { headers: { 'Content-Type': 'application/json' } });
   }
