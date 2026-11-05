@@ -22,7 +22,7 @@ No `error` lines means done. `--json` for machines.
 | ⬜ | Plus panel tools ≤ 8 characters and chat actions ≤ 12, in every language | ⚙️ |
 | ⬜ | If you use a newer place, it still makes sense when the app lacks it (`hasSurface`) | |
 | ⬜ | Per slot: capsules 2, menu 2, strip 1, panels 4 | ⚙️ |
-| ⬜ | `wants` only what you read; `draft` / `clipboard` for capsules, `message` for menu items | ⚙️ |
+| ⬜ | `wants` only what you read; `draft` / `clipboard` for capsules and plus panel tools, `message` for menu items | ⚙️ |
 | ⬜ | Static `effect`s only insert / command / open / link / toast / copy | ⚙️ |
 | ⬜ | The strip's `panel` names one of your panels | ⚙️ |
 | ⬜ | Static view files inside the package, ≤ 32 KiB | ⚙️ |

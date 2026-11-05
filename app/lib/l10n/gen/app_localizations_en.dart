@@ -14203,6 +14203,32 @@ class L10nEn extends L10n {
   String get remoteNetworkObservedAt => 'Last checked';
 
   @override
+  String get remoteNetworkLocalIpVersion => 'Phone ICE IP version';
+
+  @override
+  String get remoteNetworkRemoteIpVersion => 'Host ICE IP version';
+
+  @override
+  String get remoteNetworkIceProtocol => 'ICE protocol';
+
+  @override
+  String get remoteTransferSettings => 'Remote transfer';
+
+  @override
+  String get remoteCompactHistory => 'Compact history';
+
+  @override
+  String get remoteErrHistoryModeChanged =>
+      'The Host no longer supports compact history. Switch to another host and back, or restart the app, to reload history.';
+
+  @override
+  String get remoteCompactHistoryHint =>
+      'Reduces historical tool details on supporting DSH Remote Hosts; live replies and approvals stay unchanged. Switch hosts or restart the app to apply. Older Hosts keep full history.';
+
+  @override
+  String get searchKwRemoteCompactHistory => 'compact slim lite history tools transfer bandwidth remote';
+
+  @override
   String get stateWorkspaceFilesHint => 'Files uploaded to the current workspace:';
 
   @override
@@ -18089,6 +18115,9 @@ class L10nEn extends L10n {
   String get viewEmptySwitchWorkspace => 'Switch workspace';
 
   @override
+  String get viewEmptyHostDefaultDirectory => 'Host default folder';
+
+  @override
   String get viewScheduleTitle => 'Automations';
 
   @override
@@ -18823,9 +18852,46 @@ class L10nEn extends L10n {
   String get magpieConnectProvider => 'Import by provider';
 
   @override
+<<<<<<< HEAD
   String get magpieConnectConflict => 'The Magpie route changed during import. Please review it and try again.';
 
   @override
+=======
+  String get magpieConnectClean => 'Remove Magpie providers first';
+
+  @override
+  String get magpieConnectCleanHint =>
+      'Deletes every Magpie-managed route before importing, to clear what an earlier import left behind';
+
+  @override
+  String get magpieConnectConflict => 'The Magpie route changed during import. Please review it and try again.';
+
+  @override
+  String get magpieProgressDiscover => 'Reading the model list…';
+
+  @override
+  String get magpieProgressReadMeta => 'Reading model details…';
+
+  @override
+  String magpieProgressWriteRoute(String route, int count) {
+    return 'Writing $route ($count models)';
+  }
+
+  @override
+  String magpieProgressRemoveRoute(String route) {
+    return 'Removing $route';
+  }
+
+  @override
+  String get magpieProgressSaveKey => 'Saving the credential…';
+
+  @override
+  String magpieProgressSteps(int done, int total) {
+    return 'Step $done / $total';
+  }
+
+  @override
+>>>>>>> upstream-copy/main
   String get voiceSettingsTitle => 'Voice input';
 
   @override

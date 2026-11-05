@@ -42,6 +42,25 @@ enum NativeSurface {
   static NativeSurface? byWire(String wire) => values.where((s) => s.wire == wire).firstOrNull;
 }
 
+/// One plugin's word on a turn (`turn.note`), in the tone it asked for.
+typedef NativeTurnNote = ({String text, String? tone});
+
+/// The notes on one turn. Compares by content, so a push that changes nothing here redraws nothing.
+@immutable
+class NativeTurnNotes {
+  const NativeTurnNotes(this.notes);
+
+  final List<NativeTurnNote> notes;
+
+  String get text => notes.map((note) => note.text).join(' · ');
+
+  @override
+  bool operator ==(Object other) => other is NativeTurnNotes && listEquals(other.notes, notes);
+
+  @override
+  int get hashCode => Object.hashAll(notes);
+}
+
 /// The app's limits (protocol §7; the bridge enforces them first).
 abstract final class NativeLimits {
   /// Composer buttons and message-menu items, per plugin.
@@ -67,6 +86,10 @@ abstract final class NativeLimits {
 
   /// Plugins whose note follows one turn's footnote.
   static const turnNotesShown = 2;
+
+  /// Note plugins one conversation follows. The stream allows 32 subscriptions a connection, and
+  /// panels and strips must still get theirs however many note plugins are installed.
+  static const turnNoteFeeds = 8;
 
   /// Panels per plugin.
   static const panelsPerPlugin = 4;

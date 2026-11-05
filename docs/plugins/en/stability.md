@@ -32,7 +32,7 @@ The bridge enforces every number here.
 | `panels` | 4 | Title 16 characters |
 | `composer.tools` plus panel tools | 2 (the panel shows at most 8) | 8 characters |
 | `session.actions` chat actions | 2 | 12 characters |
-| `turn.note` turn notes | 1 (a turn shows at most 2 plugins) | 16 characters each, at most 64 turns per push |
+| `turn.note` turn notes | 1 (a turn shows at most 2 plugins, a chat follows at most 8) | 16 characters each, at most 64 turns per push |
 
 | Runtime | Limit |
 |---|---|

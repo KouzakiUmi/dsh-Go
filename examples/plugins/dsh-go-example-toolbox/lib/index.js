@@ -25,11 +25,14 @@ export function apply(ctx) {
       return { toast: '已标记' }
     })
 
-    // The demo says which turn it is. A real plugin pushes what it measured: cost, cache hits.
-    ctx.dshGo.turnNote('turn', (scope, emit) => {
-      emit(Object.fromEntries(Array.from({ length: 20 }, (_, i) => [i + 1, { text: `第 ${i + 1} 轮` }])))
-      return () => {}
-    })
+    // The demo says which turn it is, for the first 20. A real plugin pushes what it measured: cost,
+    // cache hits. Older bridges have no turnNote, and the panels below must still register there.
+    if (typeof ctx.dshGo.turnNote === 'function') {
+      ctx.dshGo.turnNote('turn', (scope, emit) => {
+        emit(Object.fromEntries(Array.from({ length: 20 }, (_, i) => [i + 1, { text: `第 ${i + 1} 轮` }])))
+        return () => {}
+      })
+    }
 
     ctx.dshGo.panel('picker', {
       view: {

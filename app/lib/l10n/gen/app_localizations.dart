@@ -24674,6 +24674,54 @@ abstract class L10n {
   /// **'最近观测'**
   String get remoteNetworkObservedAt;
 
+  /// No description provided for @remoteNetworkLocalIpVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机 ICE IP 版本'**
+  String get remoteNetworkLocalIpVersion;
+
+  /// No description provided for @remoteNetworkRemoteIpVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'主机 ICE IP 版本'**
+  String get remoteNetworkRemoteIpVersion;
+
+  /// No description provided for @remoteNetworkIceProtocol.
+  ///
+  /// In zh, this message translates to:
+  /// **'ICE 协议'**
+  String get remoteNetworkIceProtocol;
+
+  /// No description provided for @remoteTransferSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'远程传输'**
+  String get remoteTransferSettings;
+
+  /// No description provided for @remoteCompactHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'精简历史'**
+  String get remoteCompactHistory;
+
+  /// No description provided for @remoteErrHistoryModeChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'主机已不支持精简历史，请切换到其他主机后再连回来，或重启 App，重新加载历史'**
+  String get remoteErrHistoryModeChanged;
+
+  /// No description provided for @remoteCompactHistoryHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'支持的 DSH Remote 主机会精简历史工具详情，实时回复和审批不变。切换主机或重启 App 后生效；旧主机仍传输完整历史。'**
+  String get remoteCompactHistoryHint;
+
+  /// No description provided for @searchKwRemoteCompactHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'精简 简洁 历史 工具 传输 流量 远程 compact slim lite'**
+  String get searchKwRemoteCompactHistory;
+
   /// No description provided for @stateWorkspaceFilesHint.
   ///
   /// In zh, this message translates to:
@@ -31136,6 +31184,12 @@ abstract class L10n {
   /// **'切换工作区'**
   String get viewEmptySwitchWorkspace;
 
+  /// No description provided for @viewEmptyHostDefaultDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'主机默认目录'**
+  String get viewEmptyHostDefaultDirectory;
+
   /// No description provided for @viewScheduleTitle.
   ///
   /// In zh, this message translates to:
@@ -32276,12 +32330,66 @@ abstract class L10n {
   /// **'按 Provider 导入'**
   String get magpieConnectProvider;
 
+<<<<<<< HEAD
+=======
+  /// No description provided for @magpieConnectClean.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入前清除 Magpie Provider'**
+  String get magpieConnectClean;
+
+  /// No description provided for @magpieConnectCleanHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除全部 Magpie 相关路由后重新导入，用于清理上次导入留下的问题'**
+  String get magpieConnectCleanHint;
+
+>>>>>>> upstream-copy/main
   /// No description provided for @magpieConnectConflict.
   ///
   /// In zh, this message translates to:
   /// **'Magpie 路由在导入期间发生变化，请检查后重试。'**
   String get magpieConnectConflict;
 
+<<<<<<< HEAD
+=======
+  /// No description provided for @magpieProgressDiscover.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取模型列表…'**
+  String get magpieProgressDiscover;
+
+  /// No description provided for @magpieProgressReadMeta.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取模型详情…'**
+  String get magpieProgressReadMeta;
+
+  /// No description provided for @magpieProgressWriteRoute.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在写入 {route}（{count} 个模型）'**
+  String magpieProgressWriteRoute(String route, int count);
+
+  /// No description provided for @magpieProgressRemoveRoute.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在移除 {route}'**
+  String magpieProgressRemoveRoute(String route);
+
+  /// No description provided for @magpieProgressSaveKey.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存凭据…'**
+  String get magpieProgressSaveKey;
+
+  /// No description provided for @magpieProgressSteps.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {done} / {total} 步'**
+  String magpieProgressSteps(int done, int total);
+
+>>>>>>> upstream-copy/main
   /// No description provided for @voiceSettingsTitle.
   ///
   /// In zh, this message translates to:

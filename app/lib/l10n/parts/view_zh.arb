@@ -660,6 +660,7 @@
     }
   },
   "viewEmptySwitchWorkspace": "切换工作区",
+  "viewEmptyHostDefaultDirectory": "主机默认目录",
   "viewScheduleTitle": "自动化任务",
   "viewScheduleRefreshFailed": "没能刷新",
   "viewScheduleNone": "没有进行中的任务",
@@ -1354,5 +1355,40 @@
   },
   "magpieConnectApi": "按 API 导入",
   "magpieConnectProvider": "按 Provider 导入",
-  "magpieConnectConflict": "Magpie 路由在导入期间发生变化，请检查后重试。"
+  "magpieConnectClean": "导入前清除 Magpie Provider",
+  "magpieConnectCleanHint": "删除全部 Magpie 相关路由后重新导入，用于清理上次导入留下的问题",
+  "magpieConnectConflict": "Magpie 路由在导入期间发生变化，请检查后重试。",
+  "magpieProgressDiscover": "正在读取模型列表…",
+  "magpieProgressReadMeta": "正在读取模型详情…",
+  "magpieProgressWriteRoute": "正在写入 {route}（{count} 个模型）",
+  "@magpieProgressWriteRoute": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "magpieProgressRemoveRoute": "正在移除 {route}",
+  "@magpieProgressRemoveRoute": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "magpieProgressSaveKey": "正在保存凭据…",
+  "magpieProgressSteps": "第 {done} / {total} 步",
+  "@magpieProgressSteps": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

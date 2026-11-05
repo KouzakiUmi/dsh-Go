@@ -8,7 +8,7 @@
 |---|---|
 | `composer.tools` | 加号面板里的「选模板」（打开弹层，不写宿主代码）和「数字数」（读输入框） |
 | `session.actions` | 右侧栏「信息」里的「标记这段对话」 |
-| `turn.note` | 每轮脚注末尾的「第 N 轮」 |
+| `turn.note` | 脚注末尾的「第 N 轮」（演示只写前 20 轮） |
 | `placement: "plugin"` | 插件详情页里的「状态」 |
 | `presentation: "sheet"` | 「选模板」用弹层打开 |
 

@@ -13500,6 +13500,30 @@ class L10nZh extends L10n {
   String get remoteNetworkObservedAt => '最近观测';
 
   @override
+  String get remoteNetworkLocalIpVersion => '手机 ICE IP 版本';
+
+  @override
+  String get remoteNetworkRemoteIpVersion => '主机 ICE IP 版本';
+
+  @override
+  String get remoteNetworkIceProtocol => 'ICE 协议';
+
+  @override
+  String get remoteTransferSettings => '远程传输';
+
+  @override
+  String get remoteCompactHistory => '精简历史';
+
+  @override
+  String get remoteErrHistoryModeChanged => '主机已不支持精简历史，请切换到其他主机后再连回来，或重启 App，重新加载历史';
+
+  @override
+  String get remoteCompactHistoryHint => '支持的 DSH Remote 主机会精简历史工具详情，实时回复和审批不变。切换主机或重启 App 后生效；旧主机仍传输完整历史。';
+
+  @override
+  String get searchKwRemoteCompactHistory => '精简 简洁 历史 工具 传输 流量 远程 compact slim lite';
+
+  @override
   String get stateWorkspaceFilesHint => '已上传到当前工作区的文件：';
 
   @override
@@ -17113,6 +17137,9 @@ class L10nZh extends L10n {
   String get viewEmptySwitchWorkspace => '切换工作区';
 
   @override
+  String get viewEmptyHostDefaultDirectory => '主机默认目录';
+
+  @override
   String get viewScheduleTitle => '自动化任务';
 
   @override
@@ -17810,9 +17837,45 @@ class L10nZh extends L10n {
   String get magpieConnectProvider => '按 Provider 导入';
 
   @override
+<<<<<<< HEAD
   String get magpieConnectConflict => 'Magpie 路由在导入期间发生变化，请检查后重试。';
 
   @override
+=======
+  String get magpieConnectClean => '导入前清除 Magpie Provider';
+
+  @override
+  String get magpieConnectCleanHint => '删除全部 Magpie 相关路由后重新导入，用于清理上次导入留下的问题';
+
+  @override
+  String get magpieConnectConflict => 'Magpie 路由在导入期间发生变化，请检查后重试。';
+
+  @override
+  String get magpieProgressDiscover => '正在读取模型列表…';
+
+  @override
+  String get magpieProgressReadMeta => '正在读取模型详情…';
+
+  @override
+  String magpieProgressWriteRoute(String route, int count) {
+    return '正在写入 $route（$count 个模型）';
+  }
+
+  @override
+  String magpieProgressRemoveRoute(String route) {
+    return '正在移除 $route';
+  }
+
+  @override
+  String get magpieProgressSaveKey => '正在保存凭据…';
+
+  @override
+  String magpieProgressSteps(int done, int total) {
+    return '第 $done / $total 步';
+  }
+
+  @override
+>>>>>>> upstream-copy/main
   String get voiceSettingsTitle => '语音输入';
 
   @override

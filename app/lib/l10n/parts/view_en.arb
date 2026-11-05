@@ -161,6 +161,7 @@
   "viewEmptyReconnect": "Reconnect",
   "viewEmptyWorkspace": "In “{value}”",
   "viewEmptySwitchWorkspace": "Switch workspace",
+  "viewEmptyHostDefaultDirectory": "Host default folder",
   "viewScheduleTitle": "Automations",
   "viewScheduleRefreshFailed": "Couldn’t refresh",
   "viewScheduleNone": "No active automations",
@@ -365,5 +366,40 @@
   },
   "magpieConnectApi": "Import by API",
   "magpieConnectProvider": "Import by provider",
-  "magpieConnectConflict": "The Magpie route changed during import. Please review it and try again."
+  "magpieConnectClean": "Remove Magpie providers first",
+  "magpieConnectCleanHint": "Deletes every Magpie-managed route before importing, to clear what an earlier import left behind",
+  "magpieConnectConflict": "The Magpie route changed during import. Please review it and try again.",
+  "magpieProgressDiscover": "Reading the model list…",
+  "magpieProgressReadMeta": "Reading model details…",
+  "magpieProgressWriteRoute": "Writing {route} ({count} models)",
+  "@magpieProgressWriteRoute": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "magpieProgressRemoveRoute": "Removing {route}",
+  "@magpieProgressRemoveRoute": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "magpieProgressSaveKey": "Saving the credential…",
+  "magpieProgressSteps": "Step {done} / {total}",
+  "@magpieProgressSteps": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

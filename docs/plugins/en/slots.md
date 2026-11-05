@@ -39,7 +39,7 @@ Tool cards (`presentationMeta`) take no slot and need no manifest: see the [Quic
 | `minApp` | no | `"x.y.z"`. On older apps the native part is not shown |
 | `title` | no | Display name, ≤ 24 characters; defaults to the package name |
 | `icon` | no | An icon name (below); unknown names draw a generic icon |
-| `wants` | no | What taps carry: `draft` (composer text) and `clipboard` — `composer.actions` only; `message` (the long-pressed reply's text) — `message.actions` only. The app asks the person once before the first tap |
+| `wants` | no | What taps carry: `draft` (composer text) and `clipboard` — `composer.actions` and `composer.tools` only; `message` (the long-pressed reply's text) — `message.actions` only. The app asks the person once before the first tap |
 | `assets` | no | Image directory (relative to the package) for the `image` component |
 | `contributes` | yes | Slot name → array |
 
@@ -74,7 +74,7 @@ export function apply(ctx) {
 | `strip(id, dataFn)` | Strip content: `dataFn(scope, emit, caps)` calls `emit({ text, icon?, tone? })` and returns a cancel function |
 | `panel(id, { view, data?, actions? })` | A panel: `view` is a view or `(scope, caps) => view`; `data(scope, emit, caps)` pushes data; `actions` handle taps in the view |
 | `turnNote(id, dataFn)` | Turn notes: `dataFn(scope, emit, caps)` calls `emit({ [turn]: { text, tone? } })` and returns a cancel function. See [Newer places](#newer-places) |
-| `refresh(id, scope?)` | The view's structure changed: the app fetches it again |
+| `refresh(id, scope?)` | A panel's view structure changed: the app fetches it again. Strips and turn notes have no view; just keep calling `emit` |
 
 **Callback arguments**
 
@@ -118,8 +118,8 @@ These need a newer app. Check with `hasSurface(caps, 'composer.tools')`. Where t
 
 | Slot | Place | Entry fields | Per plugin | Text | Tap |
 |---|---|---|---|---|---|
-| `composer.tools` | The composer's plus panel, on the attachment tiles' grid | `id`, `label`, `icon?`, `effect?`, `panel?` | 2 (the panel shows at most 8) | `label` 8 | `panel` or `effect` runs in the app; with neither, invoke `on(id)`. Write `panel` or `effect`, not both |
-| `session.actions` | An action row in the side panel's Info, with the plugin's name on the right | `id`, `label`, `icon?`, `effect?` | 2 | `label` 12 | As capsules; `scope` has `sessionId` |
+| `composer.tools` | The composer's plus panel, on the attachment tiles' grid | `id`, `label`, `icon?`, `effect?`, `panel?`, `requires?` | 2 (the panel shows at most 8) | `label` 8 | `panel` or `effect` runs in the app; with neither, invoke `on(id)`. Write `panel` or `effect`, not both |
+| `session.actions` | An action row in the side panel's Info, with the plugin's name on the right | `id`, `label`, `icon?`, `effect?`, `requires?` | 2 | `label` 12 | As capsules; `scope` has `sessionId` |
 | `turn.note` | The end of each turn's footnote | `id` | 1 (a turn shows at most 2 plugins) | 16 each | Not tappable; tapping the footnote still opens the trajectory |
 
 ```jsonc
@@ -140,7 +140,9 @@ ctx.dshGo.turnNote('cost', (scope, emit) => watchCosts(scope.sessionId, (costs) 
 
 - At most 64 turns per push, keeping the newest; text over 16 characters is cut; malformed entries are dropped.
 - When the footnote doesn't fit, the note goes first: duration, steps and cost come before it.
-- A plugin that doesn't declare `turn.note` creates no subscription.
+- `tone` sets the color of that note, for each plugin separately; without it the note matches the footnote.
+- A plugin that doesn't declare `turn.note` creates no subscription. A chat follows the first 8 plugins with turn notes switched on; later ones don't show.
+- Older bridges have no `turnNote`, and calling it there stops every registration after it. To stay compatible, check first: `if (typeof ctx.dshGo.turnNote === 'function')`.
 
 ## Static panels
 

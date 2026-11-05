@@ -960,7 +960,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   Widget _footnote(TurnTrace trace) => Consumer(
     builder: (context, ref, _) => TurnFootnote(
       trace: trace,
-      note: ref.watch(nativeTurnNoteProvider((widget.sessionId, trace.turn))),
+      notes: ref.watch(nativeTurnNoteProvider((widget.sessionId, trace.turn))),
       onTap: () => showTrajectorySheet(context, sessionId: widget.sessionId, turn: trace.turn),
     ),
   );

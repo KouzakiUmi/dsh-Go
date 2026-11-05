@@ -1,6 +1,6 @@
 // Small pure helpers shared by the native-plugin modules. Node built-ins only.
 import { createHash } from "node:crypto";
-import { SCOPE_KEYS, SEMVER } from "./limits.js";
+import { LIMITS, SCOPE_KEYS, SEMVER, TONES } from "./limits.js";
 
 export const isPlainObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v)
   && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null);
@@ -23,6 +23,21 @@ export const truncateChars = (s, n) => [...s].slice(0, n).join("");
 /** Single-line display text: control characters and line breaks become spaces, runs collapse. */
 export function cleanLine(s) {
   return s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** A turn note push `{ turnId: { text, tone? } }` cleaned and cut to size, the newest turns kept. Undefined when malformed. */
+export function sanitizeNotes(d) {
+  if (d === null || d === undefined) return null;
+  if (!isPlainObject(d)) return undefined;
+  const out = {};
+  for (const [turn, note] of Object.entries(d).slice(-LIMITS.turnNotesPerFeed)) {
+    if (!isPlainObject(note) || typeof note.text !== "string" || turn.length > 64) continue;
+    const text = cleanLine(note.text);
+    if (text === "") continue;
+    out[turn] = { text: chars(text) > LIMITS.textChars.turnNote ? truncateChars(text, LIMITS.textChars.turnNote) : text };
+    if (TONES.includes(note.tone)) out[turn].tone = note.tone;
+  }
+  return out;
 }
 
 /** Multi-line payload text (insert / copy): keeps \n and \t, drops other control characters. */

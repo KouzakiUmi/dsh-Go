@@ -34,7 +34,7 @@
           "message"
         ]
       },
-      "description": "Content attached to taps: draft/clipboard on composer.actions, message on message.actions."
+      "description": "Content attached to taps: draft/clipboard on composer.actions and composer.tools, message on message.actions."
     },
     "assets": {
       "$ref": "#/$defs/relativePath",
@@ -406,6 +406,16 @@
         "panel": {
           "$ref": "#/$defs/id",
           "description": "Opens this plugin's panel. Write panel or effect, not both."
+        }
+      },
+      "if": {
+        "required": [
+          "panel"
+        ]
+      },
+      "then": {
+        "properties": {
+          "effect": false
         }
       }
     }

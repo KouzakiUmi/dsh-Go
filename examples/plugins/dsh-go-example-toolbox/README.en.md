@@ -8,7 +8,7 @@ Shows the newer native places, each in a few lines:
 |---|---|
 | `composer.tools` | "Template" in the plus panel (opens a sheet, no host code) and "Count" (reads the composer) |
 | `session.actions` | "Mark chat" in the side panel's Info |
-| `turn.note` | "Turn N" at the end of each turn's footnote |
+| `turn.note` | "Turn N" at the end of the footnote (the demo covers the first 20 turns) |
 | `placement: "plugin"` | "Status" on the plugin's detail page |
 | `presentation: "sheet"` | "Template" opens as a sheet |
 
