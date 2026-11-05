@@ -95,7 +95,7 @@ void main() {
   test('reads rich modalities and native reasoning names', () {
     const model = DiscoveredModel(id: 'vision');
     final spec = magpieModelSpec(model, metadata: {
-      'modalities': {'input': ['text', 'image']},
+      'modalities': {'input': ['text', 'image', 'video']},
       'supported_reasoning_levels': ['none', 'light', 'extra_high', 'ultra'],
     });
     expect(spec.input, ['text', 'image']);
