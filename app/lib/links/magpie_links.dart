@@ -151,8 +151,9 @@ Future<List<MagpieProviderRoute>> magpieImport({
         ];
   var step = 0;
   final routeCount = routes.length;
-  // The cleanup passes below remove at most one route each; the exact counts
-  // are only known after the write pass, so the bar counts them as they go.
+  // Each removal pass counts its candidates up front so the bar moves
+  // through a fixed total; adding to total inside the loop would keep
+  // done/total constant and freeze the bar.
   var total = routeCount + 1; // routes + credential save
   void advance(String label) {
     step += 1;
@@ -164,11 +165,14 @@ Future<List<MagpieProviderRoute>> magpieImport({
     // import left — stale routes, bad flags — goes with them. Nothing is
     // carried over, so the write pass creates each route from scratch.
     final latest = await backend.read();
-    for (final profile in latest?.profiles ?? const <ProviderProfile>[]) {
-      if (!_magpieManaged(profile)) continue;
+    final managed = <ProviderProfile>[
+      for (final profile in latest?.profiles ?? const <ProviderProfile>[])
+        if (_magpieManaged(profile)) profile,
+    ];
+    total += managed.length;
+    for (final profile in managed) {
       final current = await backend.read();
       if (current?.profiles.where((item) => item.route == profile.route).firstOrNull == null) continue;
-      total += 1;
       advance(appL10n.magpieProgressRemoveRoute(profile.displayName ?? profile.route));
       await backend.remove(profile.route, expectedRevision: current?.revision ?? latest?.revision);
     }
@@ -233,13 +237,18 @@ Future<List<MagpieProviderRoute>> magpieImport({
     final desiredRoutes = routes.map((route) => route.route).toSet();
     final apiRoutes = MagpieRouteKind.values.map((kind) => kind.route).toSet();
     final latest = await backend.read();
-    for (final profile in latest?.profiles ?? const <ProviderProfile>[]) {
-      if (desiredRoutes.contains(profile.route) || apiRoutes.contains(profile.route)) continue;
-      if (!_magpieManaged(profile)) continue;
+    final orphans = <ProviderProfile>[
+      for (final profile in latest?.profiles ?? const <ProviderProfile>[])
+        if (!desiredRoutes.contains(profile.route) &&
+            !apiRoutes.contains(profile.route) &&
+            _magpieManaged(profile))
+          profile,
+    ];
+    total += orphans.length;
+    for (final profile in orphans) {
       final current = await backend.read();
       final currentProfile = current?.profiles.where((item) => item.route == profile.route).firstOrNull;
       if (currentProfile != null) {
-        total += 1;
         advance(appL10n.magpieProgressRemoveRoute(profile.displayName ?? profile.route));
         await backend.remove(profile.route, expectedRevision: current?.revision ?? latest?.revision);
       }
@@ -249,15 +258,19 @@ Future<List<MagpieProviderRoute>> magpieImport({
     const obsoleteGroupRoutes = {'magpie-group', 'magpie-group-responses', 'magpie-group-anthropic'};
     const obsoleteDisplayNames = {'Magpie Group', 'Magpie Group · Responses', 'Magpie Group · Anthropic'};
     final importedRoutes = routes.map((route) => route.route).toSet();
-    for (final route in obsoleteGroupRoutes) {
-      if (importedRoutes.contains(route)) continue;
+    final snapshot = await backend.read();
+    final obsolete = <ProviderProfile>[
+      for (final route in obsoleteGroupRoutes)
+        if (!importedRoutes.contains(route))
+          for (final profile in snapshot?.profiles ?? const <ProviderProfile>[])
+            if (profile.route == route && obsoleteDisplayNames.contains(profile.displayName)) profile,
+    ];
+    total += obsolete.length;
+    for (final existing in obsolete) {
       final latest = await backend.read();
-      final existing = latest?.profiles.where((profile) => profile.route == route).firstOrNull;
-      if (existing != null && obsoleteDisplayNames.contains(existing.displayName)) {
-        total += 1;
-        advance(appL10n.magpieProgressRemoveRoute(existing.displayName ?? route));
-        await backend.remove(route, expectedRevision: latest?.revision ?? settings?.revision);
-      }
+      if (latest?.profiles.where((item) => item.route == existing.route).firstOrNull == null) continue;
+      advance(appL10n.magpieProgressRemoveRoute(existing.displayName ?? existing.route));
+      await backend.remove(existing.route, expectedRevision: latest?.revision ?? settings?.revision);
     }
   }
   advance(appL10n.magpieProgressSaveKey);
