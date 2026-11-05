@@ -17837,11 +17837,6 @@ class L10nZh extends L10n {
   String get magpieConnectProvider => '按 Provider 导入';
 
   @override
-<<<<<<< HEAD
-  String get magpieConnectConflict => 'Magpie 路由在导入期间发生变化，请检查后重试。';
-
-  @override
-=======
   String get magpieConnectClean => '导入前清除 Magpie Provider';
 
   @override
@@ -17875,7 +17870,6 @@ class L10nZh extends L10n {
   }
 
   @override
->>>>>>> upstream-copy/main
   String get voiceSettingsTitle => '语音输入';
 
   @override

@@ -18852,11 +18852,6 @@ class L10nEn extends L10n {
   String get magpieConnectProvider => 'Import by provider';
 
   @override
-<<<<<<< HEAD
-  String get magpieConnectConflict => 'The Magpie route changed during import. Please review it and try again.';
-
-  @override
-=======
   String get magpieConnectClean => 'Remove Magpie providers first';
 
   @override
@@ -18891,7 +18886,6 @@ class L10nEn extends L10n {
   }
 
   @override
->>>>>>> upstream-copy/main
   String get voiceSettingsTitle => 'Voice input';
 
   @override

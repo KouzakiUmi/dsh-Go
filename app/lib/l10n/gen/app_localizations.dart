@@ -32330,8 +32330,6 @@ abstract class L10n {
   /// **'按 Provider 导入'**
   String get magpieConnectProvider;
 
-<<<<<<< HEAD
-=======
   /// No description provided for @magpieConnectClean.
   ///
   /// In zh, this message translates to:
@@ -32344,15 +32342,12 @@ abstract class L10n {
   /// **'删除全部 Magpie 相关路由后重新导入，用于清理上次导入留下的问题'**
   String get magpieConnectCleanHint;
 
->>>>>>> upstream-copy/main
   /// No description provided for @magpieConnectConflict.
   ///
   /// In zh, this message translates to:
   /// **'Magpie 路由在导入期间发生变化，请检查后重试。'**
   String get magpieConnectConflict;
 
-<<<<<<< HEAD
-=======
   /// No description provided for @magpieProgressDiscover.
   ///
   /// In zh, this message translates to:
@@ -32389,7 +32384,6 @@ abstract class L10n {
   /// **'第 {done} / {total} 步'**
   String magpieProgressSteps(int done, int total);
 
->>>>>>> upstream-copy/main
   /// No description provided for @voiceSettingsTitle.
   ///
   /// In zh, this message translates to:
