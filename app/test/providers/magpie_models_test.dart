@@ -77,7 +77,7 @@ void main() {
     expect(adaptiveThinkingModel('deepseek-v4.1-flash'), isFalse);
   });
 
-  test('replaces auto aliases with owned provider ids and deduplicates', () {
+  test('preserves automatic routing ids separately from provider ids', () {
     const models = [
       DiscoveredModel(id: 'auto/glm-5.3-flash'),
       DiscoveredModel(id: 'volcengine/glm-5.3-flash'),
@@ -88,8 +88,8 @@ void main() {
       'volcengine/glm-5.3-flash': {},
       'auto/claude-opus-5-5': {'owned_by': 'copilot', 'native_endpoints': ['/v1/messages']},
     });
-    expect(grouped[MagpieRouteKind.completions]!.map((m) => m.id), ['volcengine/glm-5.3-flash']);
-    expect(grouped[MagpieRouteKind.anthropic]!.single.id, 'copilot/claude-opus-5-5');
+    expect(grouped[MagpieRouteKind.completions]!.map((m) => m.id), ['auto/glm-5.3-flash', 'volcengine/glm-5.3-flash']);
+    expect(grouped[MagpieRouteKind.anthropic]!.single.id, 'auto/claude-opus-5-5');
   });
 
   test('reads rich modalities and native reasoning names', () {
@@ -102,7 +102,7 @@ void main() {
     expect(spec.reasoningEfforts, {'off': null, 'low': 'low', 'xhigh': 'xhigh', 'max': 'max'});
   });
 
-  test('merges alias metadata when canonical metadata is sparse', () {
+  test('keeps automatic and provider-specific metadata separate', () {
     const models = [DiscoveredModel(id: 'auto/x'), DiscoveredModel(id: 'p/x')];
     final grouped = groupMagpieModels(models, {
       'auto/x': {
@@ -113,28 +113,43 @@ void main() {
       },
       'p/x': {},
     });
-    final model = grouped[MagpieRouteKind.anthropic]!.single;
-    expect(model.input, ['text', 'image']);
-    expect(model.reasoningEfforts, {'high': 'high'});
+    final automatic = grouped[MagpieRouteKind.anthropic]!.single;
+    expect(automatic.id, 'auto/x');
+    expect(automatic.input, ['text', 'image']);
+    expect(automatic.reasoningEfforts, {'high': 'high'});
+    expect(grouped[MagpieRouteKind.completions]!.single.id, 'p/x');
   });
 
-  test('groups models by provider inside Magpie Group protocol routes', () {
+  test('separates Auto Routing and supplier groups by protocol', () {
     const models = [
       DiscoveredModel(id: 'auto/glm-5.3-flash'),
-      DiscoveredModel(id: 'auto/claude-opus-5-5'),
+      DiscoveredModel(id: 'volcengine/glm-5.3-flash'),
+      DiscoveredModel(id: 'copilot/claude-opus-5-5'),
     ];
-    final grouped = groupMagpieModels(models, {
+    final metadata = {
       'auto/glm-5.3-flash': {'owned_by': 'volcengine', 'native_endpoints': ['/v1/responses']},
-      'auto/claude-opus-5-5': {'owned_by': 'copilot', 'native_endpoints': ['/v1/messages']},
-    });
-    final routes = groupMagpieProviderRoutes(grouped, {
-      'auto/glm-5.3-flash': {'owned_by': 'volcengine', 'native_endpoints': ['/v1/responses']},
-      'auto/claude-opus-5-5': {'owned_by': 'copilot', 'native_endpoints': ['/v1/messages']},
-    });
-    expect(routes.map((r) => r.route), ['magpie-group', 'magpie-group-responses', 'magpie-group-anthropic']);
-    expect(routes.map((r) => r.displayName), ['Magpie Group', 'Magpie Group · Responses', 'Magpie Group · Anthropic']);
-    expect(routes[1].models.single.name, startsWith('volcengine · '));
-    expect(routes[2].models.single.name, startsWith('copilot · '));
+      'volcengine/glm-5.3-flash': {'owned_by': 'volcengine', 'native_endpoints': ['/v1/responses']},
+      'copilot/claude-opus-5-5': {'owned_by': 'copilot', 'native_endpoints': ['/v1/messages']},
+    };
+    final grouped = groupMagpieModels(models, metadata);
+    final routes = groupMagpieProviderRoutes(grouped, metadata);
+    expect(routes.map((r) => r.route), [
+      'magpie-auto-routing-responses',
+      'magpie-copilot-anthropic',
+      'magpie-volcengine-responses',
+    ]);
+    expect(routes.map((r) => r.displayName), [
+      'Auto Routing · Responses',
+      'Magpie · copilot · Anthropic',
+      'Magpie · volcengine · Responses',
+    ]);
+    expect(routes[0].models.single.id, 'auto/glm-5.3-flash');
+    expect(routes[0].models.single.name, startsWith('Auto Routing · '));
+    expect(routes[1].models.single.id, 'copilot/claude-opus-5-5');
+    expect(routes[2].models.single.id, 'volcengine/glm-5.3-flash');
+    for (final route in routes) {
+      expect(providerRoutePattern.hasMatch(route.route), isTrue);
+    }
   });
 
   test('accepts only the exact Magpie provider deep link', () {

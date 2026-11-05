@@ -47,17 +47,19 @@ Future<int> configureMagpieProvider(WidgetRef ref, {MagpieImportMode mode = Magp
     for (final kind in MagpieRouteKind.values)
       kind: [
         for (final profile in profiles)
-          if (profile.route == kind.route) ...profile.models,
+          if (mode == MagpieImportMode.provider
+              ? profile.route == 'magpie' || profile.route.startsWith('magpie-')
+              : profile.route == kind.route) ...profile.models,
       ],
   };
   final grouped = groupMagpieModels(discoveredModels, metadata, existing: previous);
-  List<ProviderModelSpec> rebased(MagpieRouteKind kind, ProviderProfile? profile) => [
-    for (final spec in grouped[kind]!)
+  List<ProviderModelSpec> rebased(MagpieProviderRoute route, ProviderProfile? profile) => [
+    for (final spec in route.models)
       magpieModelSpec(
         discoveredModels.firstWhere((model) => model.id == spec.id),
         metadata: metadata[spec.id] ?? const <String, Object?>{},
         previous: profile?.models.where((old) => old.id == spec.id).firstOrNull,
-        route: kind,
+        route: route.kind,
       ),
   ];
   final routes = mode == MagpieImportMode.provider
@@ -86,7 +88,7 @@ Future<int> configureMagpieProvider(WidgetRef ref, {MagpieImportMode mode = Magp
           api: kind.api.wire,
           baseUrl: kind.baseUrl,
           apiKeyEnv: magpieGatewayKeyRef,
-          models: rebased(kind, null),
+          models: rebased(route, null),
           streamIdleTimeoutMs: magpieStreamIdleTimeoutMs,
         ),
         expectedRevision: latest?.revision ?? settings?.revision,
@@ -98,17 +100,27 @@ Future<int> configureMagpieProvider(WidgetRef ref, {MagpieImportMode mode = Magp
         api: kind.api,
         baseUrl: kind.baseUrl,
         apiKeyEnv: magpieGatewayKeyRef,
-        models: rebased(kind, latestExisting),
+        models: rebased(route, latestExisting),
         streamIdleTimeoutMs: magpieStreamIdleTimeoutMs,
         expectedRevision: latest?.revision ?? settings?.revision,
       );
     }
   }
+  if (mode == MagpieImportMode.provider) {
+    const obsoleteGroupRoutes = {'magpie-group', 'magpie-group-responses', 'magpie-group-anthropic'};
+    for (final route in obsoleteGroupRoutes) {
+      final latest = await backend.read();
+      final existing = latest?.profiles.where((profile) => profile.route == route).firstOrNull;
+      if (existing != null) {
+        await backend.remove(route, expectedRevision: latest?.revision ?? settings?.revision);
+      }
+    }
+  }
   await backend.storeKey(magpieGatewayKeyRef, magpieGatewayApiKey);
   if (backend.isLocal) {
-    for (final kind in MagpieRouteKind.values) {
+    for (final route in routes.where((route) => route.models.isNotEmpty)) {
       try {
-        await ref.read(settingsProvider.notifier).saveProviderKey(kind.route, magpieGatewayApiKey);
+        await ref.read(settingsProvider.notifier).saveProviderKey(route.route, magpieGatewayApiKey);
       } catch (_) {
         // The engine already has the key; only its self-heal copy is absent.
       }

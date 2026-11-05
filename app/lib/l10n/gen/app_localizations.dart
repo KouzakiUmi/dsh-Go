@@ -32273,7 +32273,7 @@ abstract class L10n {
   /// No description provided for @magpieConnectProvider.
   ///
   /// In zh, this message translates to:
-  /// **'导入 Magpie Group'**
+  /// **'按 Provider 导入'**
   String get magpieConnectProvider;
 
   /// No description provided for @magpieConnectConflict.
