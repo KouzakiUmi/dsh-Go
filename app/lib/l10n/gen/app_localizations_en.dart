@@ -18794,6 +18794,29 @@ class L10nEn extends L10n {
   String get viewUiDialectNote => 'Shown in DSH Web';
 
   @override
+  String get magpieConnectTitle => 'Connect Magpie Go';
+
+  @override
+  String get magpieConnectBody =>
+      'Read the models from the local Magpie and create or update the Magpie provider in DSH Go. Other providers stay unchanged.';
+
+  @override
+  String get magpieConnecting => 'Reading models and connecting Magpie…';
+
+  @override
+  String get magpieConnectUnavailable => 'No models were returned by the local Magpie. Start Magpie Go first.';
+
+  @override
+  String magpieConnectSuccess(int count) {
+    return 'Magpie connected with $count models.';
+  }
+
+  @override
+  String magpieConnectFailed(String error) {
+    return 'Couldn’t connect Magpie: $error';
+  }
+
+  @override
   String get voiceSettingsTitle => 'Voice input';
 
   @override

@@ -34,6 +34,7 @@ abstract class ProviderBackend {
     String? baseUrl,
     String? apiKeyEnv,
     List<ProviderModelSpec>? models,
+    int? streamIdleTimeoutMs,
     int? expectedRevision,
   });
 
@@ -114,6 +115,7 @@ class ClientProviderBackend implements ProviderBackend {
     String? baseUrl,
     String? apiKeyEnv,
     List<ProviderModelSpec>? models,
+    int? streamIdleTimeoutMs,
     int? expectedRevision,
   }) => client.updateProvider(
     id,
@@ -122,6 +124,7 @@ class ClientProviderBackend implements ProviderBackend {
     baseUrl: baseUrl,
     apiKeyEnv: apiKeyEnv,
     models: models,
+    streamIdleTimeoutMs: streamIdleTimeoutMs,
     expectedRevision: expectedRevision,
   );
 

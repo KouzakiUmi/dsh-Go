@@ -294,6 +294,7 @@ class ProviderProfile {
     this.defaultContextWindow,
     this.defaultMaxTokens,
     this.defaultInput,
+    this.streamIdleTimeoutMs,
   });
 
   factory ProviderProfile.fromJson(String route, Object? json) {
@@ -319,6 +320,7 @@ class ProviderProfile {
       defaultContextWindow: asInt(map['defaultContextWindow']),
       defaultMaxTokens: asInt(map['defaultMaxTokens']),
       defaultInput: asList(map['defaultInput'])?.whereType<String>().toList(growable: false),
+      streamIdleTimeoutMs: asInt(map['streamIdleTimeoutMs']),
     );
   }
 
@@ -346,6 +348,9 @@ class ProviderProfile {
   final int? defaultMaxTokens;
   final List<String>? defaultInput;
 
+  /// How long pi-ai waits for the next reply event before abandoning a turn.
+  final int? streamIdleTimeoutMs;
+
   ProviderApi? get protocol => ProviderApi.fromWire(api);
 
   String get label => (displayName == null || displayName!.trim().isEmpty) ? route : displayName!;
@@ -369,6 +374,7 @@ class ProviderProfile {
     'defaultContextWindow': ?defaultContextWindow,
     'defaultMaxTokens': ?defaultMaxTokens,
     'defaultInput': ?defaultInput,
+    'streamIdleTimeoutMs': ?streamIdleTimeoutMs,
   };
 }
 
@@ -524,6 +530,7 @@ extension ProvidersApi on DshClient {
     String? baseUrl,
     String? apiKeyEnv,
     List<ProviderModelSpec>? models,
+    int? streamIdleTimeoutMs,
     int? expectedRevision,
   }) async {
     _checkRoute(route);
@@ -534,6 +541,7 @@ extension ProvidersApi on DshClient {
       if (baseUrl != null) SettingsOp.set(at('baseURL'), baseUrl),
       if (apiKeyEnv != null) SettingsOp.set(at('apiKeyEnv'), apiKeyEnv),
       if (models != null) SettingsOp.set(at('models'), [for (final m in models) m.toJson()]),
+      if (streamIdleTimeoutMs != null) SettingsOp.set(at('streamIdleTimeoutMs'), streamIdleTimeoutMs),
     ];
     if (ops.isEmpty) throw ArgumentError('nothing to update');
     final section = await mutateSettings(piAiSettingsNs, ops, expectedRevision: expectedRevision);

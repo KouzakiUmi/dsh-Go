@@ -32228,6 +32228,42 @@ abstract class L10n {
   /// **'在网页版查看'**
   String get viewUiDialectNote;
 
+  /// No description provided for @magpieConnectTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'接入 Magpie Go'**
+  String get magpieConnectTitle;
+
+  /// No description provided for @magpieConnectBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取本机 Magpie 的模型，并在 DSH Go 中写入或更新 Magpie Provider。其他 Provider 保持不变。'**
+  String get magpieConnectBody;
+
+  /// No description provided for @magpieConnecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取模型并接入 Magpie…'**
+  String get magpieConnecting;
+
+  /// No description provided for @magpieConnectUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有从本机 Magpie 读到模型，请先启动 Magpie Go。'**
+  String get magpieConnectUnavailable;
+
+  /// No description provided for @magpieConnectSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'已接入 Magpie，发现 {count} 个模型。'**
+  String magpieConnectSuccess(int count);
+
+  /// No description provided for @magpieConnectFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法接入 Magpie：{error}'**
+  String magpieConnectFailed(String error);
+
   /// No description provided for @voiceSettingsTitle.
   ///
   /// In zh, this message translates to:
