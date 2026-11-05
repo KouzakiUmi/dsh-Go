@@ -214,28 +214,44 @@ List<MagpieProviderRoute> groupMagpieProviderRoutes(
     final value = owner.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
     return value.isEmpty ? 'other' : value;
   }
-  String suffix(MagpieRouteKind kind) => switch (kind) {
-    MagpieRouteKind.completions => '',
-    MagpieRouteKind.responses => '-responses',
-    MagpieRouteKind.anthropic => '-anthropic',
-  };
   String label(MagpieRouteKind kind) => switch (kind) {
     MagpieRouteKind.completions => '',
     MagpieRouteKind.responses => ' · Responses',
     MagpieRouteKind.anthropic => ' · Anthropic',
   };
-  return [
+  String ownerHash(String owner) {
+    var hash = 0x811c9dc5;
+    for (final unit in owner.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0x7fffffff;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
+  String autoRoute(MagpieRouteKind kind) => switch (kind) {
+    MagpieRouteKind.completions => 'magpie-auto-routing',
+    MagpieRouteKind.responses => 'magpie-auto-routing-responses',
+    MagpieRouteKind.anthropic => 'magpie-auto-routing-anthropic',
+  };
+  final routes = [
     for (final owner in owners)
       for (final kind in MagpieRouteKind.values)
         if (buckets['$owner\u0000${kind.name}']?.isNotEmpty == true)
           MagpieProviderRoute(
             owner,
             kind,
-            'magpie-${owner == 'auto' ? 'auto-routing' : slug(owner)}${suffix(kind)}',
+            owner == 'auto'
+                ? autoRoute(kind)
+                : 'magpie-provider-${slug(owner)}-${ownerHash(owner)}-${kind.name}',
             '${owner == 'auto' ? 'Auto Routing' : 'Magpie · $owner'}${label(kind)}',
             [...buckets['$owner\u0000${kind.name}']!]..sort((a, b) => a.id.compareTo(b.id)),
           ),
   ];
+  final seen = <String>{};
+  for (final route in routes) {
+    if (!seen.add(route.route)) {
+      throw MagpieModelDiscoveryException('Provider route identity collision for ${route.owner}');
+    }
+  }
+  return routes;
 }
 
 Map<MagpieRouteKind, List<ProviderModelSpec>> groupMagpieModels(
