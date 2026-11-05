@@ -108,10 +108,13 @@ Future<int> configureMagpieProvider(WidgetRef ref, {MagpieImportMode mode = Magp
   }
   if (mode == MagpieImportMode.provider) {
     const obsoleteGroupRoutes = {'magpie-group', 'magpie-group-responses', 'magpie-group-anthropic'};
+    const obsoleteDisplayNames = {'Magpie Group', 'Magpie Group · Responses', 'Magpie Group · Anthropic'};
+    final importedRoutes = routes.map((route) => route.route).toSet();
     for (final route in obsoleteGroupRoutes) {
+      if (importedRoutes.contains(route)) continue;
       final latest = await backend.read();
       final existing = latest?.profiles.where((profile) => profile.route == route).firstOrNull;
-      if (existing != null) {
+      if (existing != null && obsoleteDisplayNames.contains(existing.displayName)) {
         await backend.remove(route, expectedRevision: latest?.revision ?? settings?.revision);
       }
     }

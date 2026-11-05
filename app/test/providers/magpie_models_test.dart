@@ -133,11 +133,9 @@ void main() {
     };
     final grouped = groupMagpieModels(models, metadata);
     final routes = groupMagpieProviderRoutes(grouped, metadata);
-    expect(routes.map((r) => r.route), [
-      'magpie-auto-routing-responses',
-      'magpie-copilot-anthropic',
-      'magpie-volcengine-responses',
-    ]);
+    expect(routes.map((r) => r.route).toSet().length, 3);
+    expect(routes.map((r) => r.owner), ['auto', 'copilot', 'volcengine']);
+    expect(routes.map((r) => r.kind), [MagpieRouteKind.responses, MagpieRouteKind.anthropic, MagpieRouteKind.responses]);
     expect(routes.map((r) => r.displayName), [
       'Auto Routing · Responses',
       'Magpie · copilot · Anthropic',
@@ -147,6 +145,35 @@ void main() {
     expect(routes[0].models.single.name, startsWith('Auto Routing · '));
     expect(routes[1].models.single.id, 'copilot/claude-opus-5-5');
     expect(routes[2].models.single.id, 'volcengine/glm-5.3-flash');
+    for (final route in routes) {
+      expect(providerRoutePattern.hasMatch(route.route), isTrue);
+    }
+  });
+
+  test('keeps route ids unique across slugs protocols and reserved owners', () {
+    const models = [
+      DiscoveredModel(id: 'foo/a'),
+      DiscoveredModel(id: 'foo-responses/b'),
+      DiscoveredModel(id: 'foo-bar/c'),
+      DiscoveredModel(id: 'foo bar/d'),
+      DiscoveredModel(id: 'auto-routing/e'),
+      DiscoveredModel(id: 'group/f'),
+      DiscoveredModel(id: 'auto/g'),
+    ];
+    final metadata = {
+      'foo/a': {'owned_by': 'foo', 'native_endpoints': ['/v1/responses']},
+      'foo-responses/b': {'owned_by': 'foo-responses'},
+      'foo-bar/c': {'owned_by': 'foo-bar'},
+      'foo bar/d': {'owned_by': 'foo bar'},
+      'auto-routing/e': {'owned_by': 'auto-routing'},
+      'group/f': {'owned_by': 'group'},
+      'auto/g': {'owned_by': 'volcengine'},
+    };
+    final routes = groupMagpieProviderRoutes(groupMagpieModels(models, metadata), metadata);
+    expect(routes.length, 7);
+    expect(routes.map((route) => route.route).toSet().length, routes.length);
+    expect(routes.any((route) => route.route == 'magpie-group'), isFalse);
+    expect(routes.singleWhere((route) => route.owner == 'auto').route, 'magpie-auto-routing');
     for (final route in routes) {
       expect(providerRoutePattern.hasMatch(route.route), isTrue);
     }
