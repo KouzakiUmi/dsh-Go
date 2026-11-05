@@ -292,6 +292,10 @@ DSH_BETA_TOKEN_FILE= bash tooling/build-apk.sh --dry-run -f all
 
 只改界面时不必重建运行时，再次出包的省时做法见 [高速构建](docs/testing/fast-builds.md)。
 
+## 修改版 APK
+
+DSH Go 上游不接受 PR。当前工作区提供基于上游的修改版 APK，包含 Magpie Provider 接入和模型选择器调整，不向官方提交 PR。具体取舍与提交记录见 [Magpie 与本地选择器补丁整合](docs/magpie-integration.md)。
+
 ## 目录
 
 | 路径 | 内容 |
