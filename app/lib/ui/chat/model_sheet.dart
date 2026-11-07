@@ -564,7 +564,8 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            SheetTitleBar(catalog == null ? l10n.viewModelSelect : readListHeading(l10n.viewModelSelect, view.status)),
+            if (!picking)
+              SheetTitleBar(catalog == null ? l10n.viewModelSelect : readListHeading(l10n.viewModelSelect, view.status)),
             body,
             if (picking && widget.confirmSelection && !isValidModelSelection(catalog, _selection))
               Padding(
