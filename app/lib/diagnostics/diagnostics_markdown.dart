@@ -109,12 +109,34 @@ void _environment(StringBuffer b, DiagnosticsSnapshot s) {
 
 void _connection(StringBuffer b, DiagnosticsSnapshot s) {
   b.writeln('## 连接');
-  final entries = s.connection.entries.where((e) => e.value != null && '${e.value}'.isNotEmpty).toList();
+  final entries = s.connection.entries
+      .where((e) => e.key != 'history' && e.value != null && '${e.value}'.isNotEmpty)
+      .toList();
   if (entries.isEmpty) {
     b.writeln('- 没有正在观察的连接');
   } else {
     for (final e in entries) {
       b.writeln('- ${e.key}：${e.value}');
+    }
+  }
+  final history = s.connection['history'];
+  if (history is Map && history['events'] is List) {
+    b.writeln('- 已观察的连接历史（已丢弃 ${history['dropped']} 条；不代表观察间隙的完整时序）：');
+    for (final event in (history['events'] as List).whereType<Map>()) {
+      final fields = [
+        '#${event['sequence']}',
+        'at=${event['observedAtEpochMs']}',
+        '+${event['elapsedMs']}ms',
+        '${event['phase']}',
+        if (event['step'] != null) '${event['step']}',
+        'attempt=${event['attempt']}',
+        if (event['transport'] != null) 'transport=${event['transport']}',
+        if (event['fallbackReason'] != null) 'fallback=${event['fallbackReason']}',
+        if (event['errorKind'] != null) 'error=${event['errorKind']}',
+        if (event['retryable'] != null) 'retryable=${event['retryable']}',
+        if (event['reasonCode'] != null) 'reason=${event['reasonCode']}',
+      ];
+      b.writeln('- ${fields.join(' · ')}');
     }
   }
   b.writeln();

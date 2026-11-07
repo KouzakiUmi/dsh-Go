@@ -47,7 +47,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     private val nm = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val ticker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "dsh-phone-status").apply { isDaemon = true } }
 
-    val tasks = PhoneTasks()
+    val tasks = PhoneTasks(clock = SystemClock::elapsedRealtime)
     val log = ActionLog()
     val system = SystemActions(app)
     private val localizedUi = PhoneUiText { key, args ->
@@ -89,6 +89,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
             "phone_log_open_url" -> R.string.phone_log_open_url
             "phone_log_open_url_scheme" -> R.string.phone_log_open_url_scheme
             "phone_log_open_app" -> R.string.phone_log_open_app
+            "phone_log_system_returned_success" -> R.string.phone_log_system_returned_success
+            "phone_log_system_returned_failure" -> R.string.phone_log_system_returned_failure
             "phone_log_open_background" -> R.string.phone_log_open_background
             "phone_log_notify" -> R.string.phone_log_notify
             "phone_log_clipboard_read" -> R.string.phone_log_clipboard_read
@@ -155,9 +157,13 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     fun isEnabled(): Boolean = switchedOn(app)
 
-    /** Off takes effect at once (bridge closed, task stopped); on needs an engine restart (the UI does it). */
+    /** Off closes the bridge and stops the task after any in-flight keeper settings write.
+     * On needs an engine restart (the UI does it); the rebind gap never holds this switch.
+     */
     fun setEnabled(enabled: Boolean): Boolean {
-        prefs.edit().putBoolean(K_ENABLED, enabled).apply()
+        synchronized(keeperSwitchLock) {
+            prefs.edit().putBoolean(K_ENABLED, enabled).apply()
+        }
         if (!enabled) {
             // l10n:keep agent stop reason
             tasks.stop("手机操控已关闭")
@@ -433,6 +439,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         }
     }
 
+    /** Reads the existing immutable gate snapshot without refreshing phone state. */
+    fun backgroundProbeDiagnostics(): Map<String, Any?> = background.inputProbeDiagnostics()
+
     fun status(): Map<String, Any?> = linkedMapOf(
         "enabled" to isEnabled(),
         "bridgeListening" to bridge.listening,
@@ -478,12 +487,12 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         return when (val path = background.grantPath(A11yKeeper.granted(app))) {
             SecureSettingsGrant.GRANTED -> mapOf("ok" to true)
             SecureSettingsGrant.SHIZUKU, SecureSettingsGrant.ADB -> {
-                background.grantSecureSettings(path, mayStart)
+                val attempt = background.grantSecureSettings(path, mayStart)
                 val ok = A11yKeeper.granted(app)
                 if (ok) ticker.execute(::keep)
                 emitStatus()
-                val failed = if (path == SecureSettingsGrant.ADB) R.string.background_adb_disconnected else R.string.a11y_keeper_grant_failed
-                mapOf("ok" to ok, "reason" to if (ok) null else AppStrings.get(app, failed))
+                val failed = SecureSettingsGrant.failureReason(ok, attempt)
+                mapOf("ok" to ok, "reason" to failed?.let { AppStrings.get(app, it) })
             }
             SecureSettingsGrant.SHIZUKU_PERMISSION -> {
                 // Permission may arrive after a new mode/off intent. Keep the original UI lease
@@ -629,6 +638,9 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         const val SERVER_VERSION = "1"
         private const val PREFS = "dsh_phone"
         private const val K_ENABLED = "enabled"
+
+        /** Only master preference publication and the keeper's final settings writes share this lock. */
+        internal val keeperSwitchLock = Any()
         private const val K_POLICIES = "policies"
         private const val K_TCP_FALLBACK = "tcpFallback"
         private const val CHANNEL_FIX = "dsh-phone-fix"

@@ -1,5 +1,13 @@
 {
   "patches": {
+    "cordis-effect-dispose-completion.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/cordis/lib/index.js": {
+          "after": "b8b87360ebc67df2d0aabea214b8ed30d4bde3767e354ebb1b85fc6c15b45a05",
+          "before": "627409afa06a265f7253200d3bc4648e88805c39fd3768568eb9b9518a31fe8f"
+        }
+      }
+    },
     "credentials-decimal-refs.diff": {
       "0.2.1-rc.4": {
         "node_modules/@deepseek-ai/dsh-credentials-local/lib/index.js": {
@@ -48,6 +56,14 @@
         }
       }
     },
+    "piai-google-openai-store.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js": {
+          "after": "f10502eab12993c68c1f886e5de5d3aa707604f504660cb861fc1b45faffecaf",
+          "before": "df81627c173163d0b918692f4a3b87e22cbdb5883b809e4d70d6152d1e68d948"
+        }
+      }
+    },
     "plugin-manager-active-run-guard.diff": {
       "0.2.1-rc.4": {
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
@@ -73,6 +89,14 @@
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "edb931cb1b6d197efac694c3e41c8220c7b1d4d6f545c8ad74dc798c54d31095",
           "before": "272efa48be4bce0a75ce7fe06eabf1c7fb60ca0e68b0708945199e80a9893bea"
+        }
+      }
+    },
+    "preset-legacy-delegation.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-agent-preset/lib/index.js": {
+          "after": "5c8452bdb9954acd98737297512a3d8cb8d4ea534ee6e6ea5c2050aba8cf08e9",
+          "before": "23cd2dd62ac3b27522a2d377e14b5a93f80c2189e733937dcdd02b73a6d3d1da"
         }
       }
     },
@@ -435,7 +459,7 @@
       },
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js": {
-          "after": "57e84969b6f73a01acd7702b188323e012e7c6328a29d65133ace4c6bc5da608",
+          "after": "1dde69bfc2270468bda6897a29277f3b3fb3b46c4b1844268f6fd35f563ab514",
           "before": "a6fa8e0c7c90191caf5f4a3bb5c624a86e9845cf3c79d020b71420d0e20ae4c1"
         },
         "node_modules/@deepseek-ai/dsh-schedule/lib/index.js": {
@@ -571,8 +595,8 @@
       },
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-agent-loop/lib/index.js": {
-          "after": "d6ebbb703d0a9236e15f4a9c65d079f70ce67d24c81756f83a3ba1cd8353815b",
-          "before": "57e84969b6f73a01acd7702b188323e012e7c6328a29d65133ace4c6bc5da608"
+          "after": "927efc78e67b6203502892f1ebef4d198c9b95dfc8f8432692ba28f41eb511bf",
+          "before": "1dde69bfc2270468bda6897a29277f3b3fb3b46c4b1844268f6fd35f563ab514"
         },
         "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
           "after": "cd7fd35ee3f4cc3c0d8d6121361bf81fc12549ed04be12818ca00ba70ac70353",
@@ -1160,6 +1184,14 @@
         }
       }
     },
+    "zzzzzzzzzzz-plugin-operations-log-utf8.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-plugin-manager/lib/types/operations.js": {
+          "after": "c7d72b35b81443a16f6a57f91087ba2f88812d0e5db7b9cdf131d852adcff9c8",
+          "before": "5886367b89cde0db08f4f9645afeb6c8a21ecb0be8a3f92d2459b433c9019661"
+        }
+      }
+    },
     "zzzzzzzzzzz-plugin-update-precondition.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
@@ -1168,11 +1200,27 @@
         }
       }
     },
+    "zzzzzzzzzzzz-plan-pending-restore.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-plan-mode/lib/index.js": {
+          "after": "e6326e2ac1756bdc947a3690f1e212a6b6b680c3c76ec40468a3d7b63af0608a",
+          "before": "5f9ee37cd7bc3922c05148504700ac25eb2179099d494c5721380cd71363ced0"
+        }
+      }
+    },
     "zzzzzzzzzzzz-plugin-update-hmr-selection.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "4f615be658bc12600986f794b0b399b2c25df0b36dd89bda5dd0666cbf3df726",
           "before": "98b57a9220fe7620113949927a792006175546b63c5a0917305ac2e821cf984d"
+        }
+      }
+    },
+    "zzzzzzzzzzzzz-plan-failed-command-pending.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-plan-mode/lib/index.js": {
+          "after": "c60a770d64661cdc7131a9e27f960f6596ca41c8c51c2dfc5887276b9be44cdd",
+          "before": "e6326e2ac1756bdc947a3690f1e212a6b6b680c3c76ec40468a3d7b63af0608a"
         }
       }
     },
@@ -1297,6 +1345,170 @@
         "node_modules/@deepseek-ai/dsh-repeat-tool-reminder/lib/index.js": {
           "after": "07160bc51a4246d5473a0704e9f3f97cdec1ed70ce0b87d0c1e7f19a542345c6",
           "before": "c27587fc302f45c9ea6863bfaa2f96894a8a67e894ddfd74cf02477a79ab67e5"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzz-json-equality-own-keys.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-util-values/lib/index.js": {
+          "after": "5182011611180fcc1f7efc1506075848e6ffd3194f77f2afcf76fb21cab2c504",
+          "before": "8b4ffdf40126d48bd22017b4671f7e90612d01833fc865f7a0b60d3de4183e8b"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzz-workspace-recovery-index.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-storage-domain/lib/index.js": {
+          "after": "910ceb1907427dc53f1444461c4b440610d99f5631ab7ccb05a2ff03a6d8f4b5",
+          "before": "a50f853f9cc1d4d4d2eea6c4f21498ef604ef11ae3131bc41e21189fc5f4483a"
+        },
+        "node_modules/@deepseek-ai/dsh-storage-json/lib/index.js": {
+          "after": "62827d69b251c0ee88c35293257dc2480a276227c7da01d6a21ab986936c9b05",
+          "before": "fd735487e2053434485efca3af8ee75f026ad23ed475136fd62864c5e0b41583"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzz-tool-result-codepoint-count.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-compaction-tool-result-pruner/lib/index.js": {
+          "after": "641f5f51dc284725247978b9cec63941cdbe24acfe7f64117e4b32bfce7bb128",
+          "before": "e86442e9a2403c392482b9035916e5610c251d62f3581892866404d69c064254"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzz-attachment-staging-error.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js": {
+          "after": "d99fe87a115b5d4eda5858d67a463ebf1a01d87c3bda891b25590ee3f01d4f51",
+          "before": "393dd55f0e5967626b5657c27b88f5eb0383bc54bb8a751a9e5b5d9596fb8202"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-reference-retention-size.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-reference/lib/index.js": {
+          "after": "fa7d1fb76f062a19a3e8f2b19a072d86b9a9dd7435a8aad527458def09e783cc",
+          "before": "58e98b0ffe8d81870e12401be52dc2919d448413de376927a70c374db3f19f05"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-search-snippet-window.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-query-sqlite/lib/index.js": {
+          "after": "9c347d1916155416f4af9ddf79f196e106be683884acfa107246745512853d35",
+          "before": "df611a74e9110af10d2716a09ec8c67ba9f7d4e51d1edddc68e80d12c8d106f3"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-workspace-capture-recovery.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-workspace-changes/lib/index.js": {
+          "after": "b73138187c8b251cf1da086fddf959fe3cca46df9c68d3aaca95bad01f3e9a62",
+          "before": "d265a6eac8de3541db34f47796856a6bc3a3d515e159586dac45af63340408cc"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-fs-parent-kind.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
+          "after": "c12489cdad3a5906d44bf3fbbe2753645bb1139f40c3b97e5ac150d0da6afe77",
+          "before": "35ae78eb238828d528ef5c191961120924fbf34155c577e8b3a2ade4ed50e010"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-fs-line-style.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-fs-local/lib/index.js": {
+          "after": "d22c2ead8df5061e7f5b5633959152143e3bc871c42fff81d2ac14de07cbfb00",
+          "before": "c12489cdad3a5906d44bf3fbbe2753645bb1139f40c3b97e5ac150d0da6afe77"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-fs-patch-equal-width.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-fs-patch/lib/index.js": {
+          "after": "e92639f30b2afde10e83a2d359ae6268527f455c33ee8d8bb6472291d71ee0a3",
+          "before": "c70df243ca6524ef1f2209736a4c1b4609b683f35ff6f031d35c22397379ca8a"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-instruction-encoding-reuse.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-agent-instructions/lib/index.js": {
+          "after": "9cec071823953a5ebd52e98618484918a208af468ab8bd3a4f7d50e2397c5603",
+          "before": "afbd526d1e3126a368774f24105140adc3ef532ca4aa93cfa0fb1318d5b9b75d"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-str-editor-bom.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-tool-str-replace-editor/lib/index.js": {
+          "after": "1c8526ee27d12ea6dc70a9d3fbf49b396b3bd5cd57cb3280a6047977a842b42f",
+          "before": "ad2ebafd722a97b7d641b59e03f5c969c0958aa989ea7361fcd7e78ff2c7e92d"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-sqlite-document-count.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-query-sqlite/lib/index.js": {
+          "after": "6a70f328528d9c799b9f15a0c4505712ebb259163d4e9abe7a6a7dfa0557730b",
+          "before": "9c347d1916155416f4af9ddf79f196e106be683884acfa107246745512853d35"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-lifecycle-enumeration.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js": {
+          "after": "8a766569e14937ae833441cc75985e14ddbf5d07a201279d6386ef7cc8fea67b",
+          "before": "828b8e84e5f922d3b3d137ada0be4df3187bc5c82bb51ec3fa3384ca3efbf60b"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-session-cold-hint-stat.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js": {
+          "after": "5661abb18af697db2b18b6cc0cef700af40bf2289a68da73b0b3c817f13bca9c",
+          "before": "491160941daf50c0e8f644466f69a64924622057265c7b38dde3611e5721ea67"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-loader-entry-lifecycle.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/cordis-plugin-loader/lib/index.js": {
+          "after": "c0aa9b24d4d85b311792cb8bb1f43f5e5af767f679abe61b66262bd29017208b",
+          "before": "4f0a93a1ef5bb09bd6e1c64b30df11be25efd46c316b9505c5ddf308974367a6"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-loader-group-own-key.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/cordis-plugin-loader/lib/index.js": {
+          "after": "2d41405fe84c0960bcc1e5b40133526edd38c331790915fcce3c923f1fc3769d",
+          "before": "c0aa9b24d4d85b311792cb8bb1f43f5e5af767f679abe61b66262bd29017208b"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-storage-json-postpublish.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-storage-json/lib/index.js": {
+          "after": "30b255f943d5e24670cda9817c149700e88c490f17e7c244bfb6c0ce9685103f",
+          "before": "62827d69b251c0ee88c35293257dc2480a276227c7da01d6a21ab986936c9b05"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-credentials-record-own-key.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-credentials-local/lib/index.js": {
+          "after": "75668bd81bab207ad782fc6681f14b108268b8ceb512aff23d30721cfeb3c2d8",
+          "before": "46c193e78c39303bfe394e022c3f29d4734887f926682cd5efe9bdc8027cf77e"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz-piai-credential-wait-cancel.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js": {
+          "after": "0a99a2fc903a4285044b09114b3bd20ee1e612f39aa381e4a71b10d48ee9e9f7",
+          "before": "070c839e2c00e2d5f7c5d82307ca3d84dbb2323e46979daf265908751bbe8ae8"
         }
       }
     }

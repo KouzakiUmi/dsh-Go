@@ -62,7 +62,11 @@ function parseCaps(sp) {
     components,
     features,
     key: JSON.stringify([versions, app, locale.toLowerCase(), ...(features.length ? [features] : []), ...(placements.length ? [placements] : [])]),
-    forPlugin: () => ({ protocol: PROTOCOL, app, locale, surfaces: [...surfaces], components: [...components], ...(features.length ? { features: [...features] } : {}) }),
+    // Omitted lists preserve the SDK's v1 defaults; explicit empty lists stay empty.
+    forPlugin: () => ({ protocol: PROTOCOL, app, locale,
+      ...(sp.has("surfaces") ? { surfaces: [...surfaces] } : {}),
+      ...(sp.has("components") ? { components: [...components] } : {}),
+      ...(features.length ? { features: [...features] } : {}) }),
   };
 }
 
@@ -173,6 +177,7 @@ export function createNativeRoutes(core) {
     }
     if (!isPlainObject(view)) fail(500, "invalid-view", "static view must be an object");
     const json = toJson(view);
+    if (json && json.bytes > L.viewBytes) fail(500, "invalid-view", `static view exceeds ${L.viewBytes} bytes`);
     const normalized = json && { value: json.value, bytes: json.bytes };
     staticViews.set(file, { stamp, view: normalized });
     return normalized;
@@ -327,9 +332,21 @@ export function createNativeRoutes(core) {
     const event = { surface: body.surface, id: body.id, locale, signal: controller.signal };
     if (body.action !== undefined) event.action = body.action;
     if (body.value !== undefined) event.value = body.value;
-    let result;
+    let result, deferred;
     try {
-      result = await withTimeout(call(fn, arg, event), L.handlerTimeoutMs);
+      ({ result, deferred } = await withTimeout(call(fn, arg, event).then(result => {
+        const deferred = splitPending(result);
+        // Own eager work even if the outer handler finishes after its deadline.
+        // Assimilate a thenable once; later delivery consumes this same Promise.
+        // Never start lazy work, and never mutate the plugin's result object.
+        const work = deferred?.ok ? deferred.work : deferred ? result.result : undefined;
+        if (typeof work !== "function" && typeof work?.then === "function") {
+          const owned = Promise.resolve(work);
+          owned.then(undefined, () => {});
+          if (deferred.ok) deferred.work = owned;
+        }
+        return { result, deferred };
+      }), L.handlerTimeoutMs));
     } catch (error) {
       controller.abort();
       if (!current()) return rejectStale();
@@ -340,14 +357,6 @@ export function createNativeRoutes(core) {
       release();
     }
     const panels = new Set(rec.parsed.items.panels.map((p) => p.id));
-    const deferred = splitPending(result);
-    // Invalid metadata still leaves the route owning an already-started Promise.
-    // The validator omits work on rejection; never start a refused lazy function.
-    if (deferred !== undefined && !deferred.ok) {
-      const work = result.result;
-      if (typeof work?.then === "function") work.then(undefined, () => {});
-    }
-    if (!current() && typeof deferred?.work?.then === "function") deferred.work.then(undefined, () => {});
     if (!current()) return rejectStale();
     if (deferred !== undefined) {
       return startPending(res, { pkg: body.pkg, id: body.id, streamId: body.stream, scope, panels, source: isPanel ? body.id : undefined, controller, deferred, current, filterPatches });
@@ -472,6 +481,7 @@ export function createNativeRoutes(core) {
       return;
     }
     const bytes = await readFile(file);
+    if (bytes.length > L.assetBytes) fail(404, "not-found", "no such asset");
     res.writeHead(200, { ...headers, "content-length": bytes.length });
     res.end(req.method === "HEAD" ? undefined : bytes);
   }

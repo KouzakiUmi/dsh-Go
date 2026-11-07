@@ -1270,6 +1270,21 @@ class L10nZh extends L10n {
   String get activityUsageAfterMessage => '发送消息后显示';
 
   @override
+  String get activityUsageWaiting => '等待上下文用量数据';
+
+  @override
+  String get activityUsageProjected => '预计下次请求';
+
+  @override
+  String get activityUsageLastRequest => '上次请求';
+
+  @override
+  String get activityUsageBreakdownEstimate => '分项为独立估算，可能与总量不同';
+
+  @override
+  String get activityUsageCumulativeInput => '累计输入';
+
+  @override
   String get activityUsageContextFull => '上下文将满，发送 /compact 可压缩';
 
   @override
@@ -4460,6 +4475,679 @@ class L10nZh extends L10n {
   String commonMonthDay(String month, int day) {
     return '$month月$day日';
   }
+
+  @override
+  String get companionTitle => '伙伴小屋';
+
+  @override
+  String get companionEntrySubtitle => '和她待一会儿';
+
+  @override
+  String get companionDefaultName => '她';
+
+  @override
+  String companionInputHint(String name) {
+    return '和$name说点什么';
+  }
+
+  @override
+  String get companionMenu => '更多';
+
+  @override
+  String get companionVoice => '语音';
+
+  @override
+  String get companionStop => '让她停下';
+
+  @override
+  String get companionSend => '发送';
+
+  @override
+  String get companionNotConnected => '现在连不上引擎，等一下再和我说吧。';
+
+  @override
+  String get companionSendFailed => '这句话没送出去，要不要再说一次？';
+
+  @override
+  String get companionNeedsAttention => '有件事要你确认，点这里去看';
+
+  @override
+  String get companionMenuHistory => '查看聊天记录';
+
+  @override
+  String get companionMenuRestart => '重新认识';
+
+  @override
+  String get companionMenuRestartHint => '开始一段新对话';
+
+  @override
+  String get companionMenuRestartConfirm => '她会忘记这段对话。旧的记录还留在主机上，不会被删除。';
+
+  @override
+  String get companionMenuRemovePack => '移除素材';
+
+  @override
+  String get companionMenuRemoveConfirm => '这台手机上的角色素材会被删除，聊天记录不受影响。下次进来时要重新导入。';
+
+  @override
+  String companionCreditAuthor(String name) {
+    return '作者：$name';
+  }
+
+  @override
+  String get companionSetupTitle => '把她接回家';
+
+  @override
+  String get companionSetupBody => '角色素材不在 App 里，要用时才放进手机。选择素材包（zip）导入后就能见到她。';
+
+  @override
+  String get companionSetupImport => '导入素材包';
+
+  @override
+  String get companionFailedTitle => '她没能出来';
+
+  @override
+  String companionFailedBody(String reason) {
+    return '这台手机上加载失败了（$reason）。可以重新导入素材包再试一次。';
+  }
+
+  @override
+  String get companionPackBroken => '这个文件打不开，可能不是素材包或已经损坏。';
+
+  @override
+  String get companionPackRuntimeMismatch => '素材包里的运行库和这个版本的 App 对不上。';
+
+  @override
+  String get companionPackNoRuntime => '这个包只有角色，手机上还没有运行库。先导入完整的素材包。';
+
+  @override
+  String get companionPackNoModel => '包里没有找到 Live2D 模型（.model3.json）。';
+
+  @override
+  String get companionPackUnsafe => '包里有不允许的文件或路径，没有导入。';
+
+  @override
+  String get companionPackTooLarge => '素材包太大了。';
+
+  @override
+  String get companionPackStorage => '写入失败，看看手机存储空间够不够。';
+
+  @override
+  String companionGreetFirst(String name) {
+    return '你好呀，我是$name。以后就住在这里了，请多指教。';
+  }
+
+  @override
+  String get companionGreetMorning => '早呀，今天也要好好吃早饭。';
+
+  @override
+  String get companionGreetNoon => '中午啦，吃过饭了吗？';
+
+  @override
+  String get companionGreetAfternoon => '下午好，我刚才在发呆。';
+
+  @override
+  String get companionGreetEvening => '晚上好，今天过得怎么样？';
+
+  @override
+  String get companionGreetLate => '这么晚还没睡呀？';
+
+  @override
+  String get companionGreetLong => '好久不见，我还以为你把我忘啦。';
+
+  @override
+  String get companionGreetBack => '嗯？又回来啦。';
+
+  @override
+  String get companionWake => '嗯……我没睡着，就是眯了一下。';
+
+  @override
+  String get companionPat1 => '嘿嘿……再摸一会儿也可以。';
+
+  @override
+  String get companionPat2 => '唔，好舒服。';
+
+  @override
+  String get companionPat3 => '头发要被你弄乱啦。';
+
+  @override
+  String get companionTapHead1 => '怎么啦？';
+
+  @override
+  String get companionTapHead2 => '嗯？';
+
+  @override
+  String get companionTapFace1 => '别戳脸啦。';
+
+  @override
+  String get companionTapFace2 => '哇，手好凉。';
+
+  @override
+  String get companionTapFace3 => '我脸上有东西吗？';
+
+  @override
+  String get companionTapBody1 => '哎，吓我一跳。';
+
+  @override
+  String get companionTapBody2 => '干嘛呀？';
+
+  @override
+  String get companionTapBody3 => '围裙刚洗过的！';
+
+  @override
+  String get companionTapTail1 => '尾巴不可以随便碰！';
+
+  @override
+  String get companionTapTail2 => '呀，好痒。';
+
+  @override
+  String get companionTapTail3 => '这可是很重要的尾巴。';
+
+  @override
+  String get companionTapLegs1 => '地上有什么吗？';
+
+  @override
+  String get companionTapLegs2 => '你在看哪里呀。';
+
+  @override
+  String get companionTease1 => '别闹了，头都晕了。';
+
+  @override
+  String get companionTease2 => '再戳就不理你了！';
+
+  @override
+  String get companionTease3 => '你是不是很闲？';
+
+  @override
+  String get companionStatusIdle => '在发呆';
+
+  @override
+  String get companionStatusListening => '在听你说';
+
+  @override
+  String get companionStatusThinking => '在想';
+
+  @override
+  String get companionStatusSpeaking => '在说话';
+
+  @override
+  String get companionStatusSleeping => '睡着了';
+
+  @override
+  String get companionStatusAway => '不在';
+
+  @override
+  String get companionListening => '在听…';
+
+  @override
+  String get companionTouchHint => '摸摸她的头试试';
+
+  @override
+  String get companionArriving => '她正在游过来…';
+
+  @override
+  String get companionPrivacyLine => '素材只存在这台手机上，聊天走当前主机。';
+
+  @override
+  String get companionMemoryTitle => '她记得的事';
+
+  @override
+  String companionMemoryScope(String host) {
+    return '保存在$host上。她现在还不会自己想起这些，之后的版本会接上。';
+  }
+
+  @override
+  String get companionMemoryAdd => '添加';
+
+  @override
+  String get companionMemoryEdit => '修改';
+
+  @override
+  String get companionMemorySave => '保存';
+
+  @override
+  String get companionMemoryHint => '比如：我喜欢无糖的茶，不喝咖啡';
+
+  @override
+  String get companionMemoryForget => '忘掉';
+
+  @override
+  String get companionMemoryForgetTitle => '让她忘掉这件事？';
+
+  @override
+  String get companionMemoryEmpty => '还没有记下什么';
+
+  @override
+  String get companionMemoryEmptyHint => '想让她记住的事，可以在这里写下来。只存在当前主机上，随时能改能删。';
+
+  @override
+  String get companionMemoryUnsupported => '这台主机还不能保存她的记忆';
+
+  @override
+  String get companionMemoryUnsupportedHint => '经 DSH Remote 中继连接时用不了，或者这台主机的 dsh-go 桥接比较旧。';
+
+  @override
+  String get companionMemoryLoadFailed => '没读到';
+
+  @override
+  String get companionMemoryRetry => '重试';
+
+  @override
+  String get companionMemoryConflict => '刚才另一处改过了，已经刷新';
+
+  @override
+  String get companionMemoryFull => '记满了，先删掉一些吧';
+
+  @override
+  String get companionMemorySaveFailed => '没保存上，再试一次吧';
+
+  @override
+  String get companionStatusSnacking => '在吃点心';
+
+  @override
+  String get companionStatusPlaying => '在玩泡泡';
+
+  @override
+  String get companionStatusResting => '在软垫上歇着';
+
+  @override
+  String get companionSnack1 => '啊呜——好吃！';
+
+  @override
+  String get companionSnack2 => '是海苔味的，谢谢你。';
+
+  @override
+  String get companionSnack3 => '嗯……我还能再吃一块吗？';
+
+  @override
+  String get companionPlay1 => '嘿，接住啦！';
+
+  @override
+  String get companionPlay2 => '泡泡软软的，好好玩。';
+
+  @override
+  String get companionPlay3 => '它又飘回去了。';
+
+  @override
+  String get companionRest1 => '那我在这儿靠一会儿。';
+
+  @override
+  String get companionRest2 => '你说，我听着呢。';
+
+  @override
+  String get companionTouchHintHome => '点点贝壳、泡泡和软垫，点心还能拖到她嘴边';
+
+  @override
+  String get companionMenuMode => '对话方式';
+
+  @override
+  String get companionModeLight => '轻量';
+
+  @override
+  String get companionModeLightHint => '只聊天。手机直连模型，不用启动引擎';
+
+  @override
+  String get companionModeFull => '完整';
+
+  @override
+  String get companionModeFullHint => '主机上的 DSH 引擎，带工具和手机操控';
+
+  @override
+  String get companionLightNoKey => '轻量模式要用 DeepSeek API Key，在设置里填上就能和我聊啦。';
+
+  @override
+  String get companionLightBadKey => 'API Key 好像不对，或者已经失效了。';
+
+  @override
+  String get companionLightBusy => '那边有点忙，等一下再和我说吧。';
+
+  @override
+  String get companionNotConnectedTryLight => '现在连不上主机。只想聊天的话，可以在右上角菜单换成轻量模式。';
+
+  @override
+  String get companionMenuRestartLightHint => '清掉这台手机上的聊天记录';
+
+  @override
+  String get companionMenuRestartLightConfirm => '她会忘记这段对话，这台手机上的聊天记录会被删掉。';
+
+  @override
+  String get companionInviteRest => '要不要陪我在软垫上歇一会儿？';
+
+  @override
+  String get companionInviteAccept => '好呀';
+
+  @override
+  String get companionInviteDecline => '等会儿';
+
+  @override
+  String get companionInviteYes1 => '嘿嘿，就歇一小会儿。';
+
+  @override
+  String get companionInviteYes2 => '那我先躺好啦，你也放松点。';
+
+  @override
+  String get companionMenuInvite => '主动邀请';
+
+  @override
+  String get companionMenuInviteHint => '你安静陪着她时，她偶尔会邀你一起歇一会儿';
+
+  @override
+  String get companionSetupBundled => '接她回家';
+
+  @override
+  String get companionSetupBodyBundled => '她就在 App 里，点一下就到，素材只解压到这台手机上。也可以导入别的素材包（zip）。';
+
+  @override
+  String get companionSetupImportOther => '导入别的素材包';
+
+  @override
+  String get companionMenuRemoveConfirmBundled => '这台手机上解压出来的角色素材会被删除，聊天记录不受影响。之后随时可以再接她回来。';
+
+  @override
+  String get companionHug1 => '唔……抱抱。';
+
+  @override
+  String get companionHug2 => '被你这样抱着，好安心。';
+
+  @override
+  String get companionHug3 => '再抱一会儿，就一会儿。';
+
+  @override
+  String get companionBondTitle => '你们的关系';
+
+  @override
+  String get companionBond0 => '刚认识';
+
+  @override
+  String get companionBond1 => '渐渐熟悉';
+
+  @override
+  String get companionBond2 => '熟起来了';
+
+  @override
+  String get companionBond3 => '很亲近';
+
+  @override
+  String get companionCloser1 => '好像……没那么紧张了。';
+
+  @override
+  String get companionCloser2 => '和你待着，越来越自在了。';
+
+  @override
+  String get companionCloser3 => '以后也要常来哦，我会想你的。';
+
+  @override
+  String get companionPatClose => '最喜欢被你摸头了。';
+
+  @override
+  String get companionHugClose => '抱紧一点也没关系哦。';
+
+  @override
+  String companionTaskDone(String title) {
+    return '「$title」那边跑完啦。';
+  }
+
+  @override
+  String get companionTaskDoneUntitled => '你那边的任务跑完啦。';
+
+  @override
+  String companionTaskFailed(String title) {
+    return '「$title」好像出错了，要去看看吗？';
+  }
+
+  @override
+  String get companionTaskFailedUntitled => '你那边的任务好像出错了，要去看看吗？';
+
+  @override
+  String companionTaskApproval(String title) {
+    return '「$title」在等你批准。';
+  }
+
+  @override
+  String get companionTaskApprovalUntitled => '你那边有件事在等你批准。';
+
+  @override
+  String companionTaskQuestion(String title) {
+    return '「$title」有事想问你。';
+  }
+
+  @override
+  String get companionTaskQuestionUntitled => '你那边有个问题在等你回答。';
+
+  @override
+  String get companionTaskOpen => '去看看';
+
+  @override
+  String get companionMenuVoice => '她的声音';
+
+  @override
+  String get companionMenuVoiceHint => '用手机自带的语音读出她说的话';
+
+  @override
+  String get companionVoiceHello => '你好呀，这是我的声音。喜欢的话就留着吧。';
+
+  @override
+  String get companionVoiceUnavailable => '这台手机没有能用的中文语音。可以在系统设置的「文字转语音」里装一个。';
+
+  @override
+  String get companionWidgetWaiting => '在小屋里等你';
+
+  @override
+  String get companionVoiceOn => '让她出声';
+
+  @override
+  String get companionVoiceOffHint => '打开时她会先用选好的声音打个招呼。';
+
+  @override
+  String get companionVoiceOff => '关';
+
+  @override
+  String get companionVoiceSource => '声音来源';
+
+  @override
+  String get companionVoiceSystem => '手机自带';
+
+  @override
+  String get companionVoiceSystemHint => '系统的文字转语音，不联网也能用';
+
+  @override
+  String get companionVoiceOpenai => 'OpenAI 兼容接口';
+
+  @override
+  String get companionVoiceOpenaiHint => 'OpenAI、硅基流动，以及大多数自建的 GPT-SoVITS、CosyVoice、edge-tts 服务';
+
+  @override
+  String get companionVoiceCustom => '自定义 HTTP';
+
+  @override
+  String get companionVoiceCustomHint => '别的接口：自己填请求和返回的格式';
+
+  @override
+  String get companionVoiceApi => '接口';
+
+  @override
+  String get companionVoiceBase => '地址';
+
+  @override
+  String get companionVoiceBaseHelper => '填到 /v1 为止，App 会接上 /audio/speech';
+
+  @override
+  String get companionVoiceKeyHelper => '存在这台手机的安全存储里';
+
+  @override
+  String get companionVoiceModel => '模型';
+
+  @override
+  String get companionVoiceVoice => '音色';
+
+  @override
+  String get companionVoiceVoiceHelper => '服务给的音色名，比如 alloy，或你自建服务里的角色名';
+
+  @override
+  String get companionVoiceRequest => '请求';
+
+  @override
+  String get companionVoiceUrl => '请求地址';
+
+  @override
+  String get companionVoiceUrlHelper => '地址里也可以用 {text}';
+
+  @override
+  String get companionVoiceMethod => '方法';
+
+  @override
+  String get companionVoiceHeaders => '请求头';
+
+  @override
+  String get companionVoiceHeadersHelper => '每行一个；会存进安全存储';
+
+  @override
+  String get companionVoiceBody => '请求体';
+
+  @override
+  String get companionVoiceBodyHelper => '{text} 会换成她要说的话';
+
+  @override
+  String get companionVoiceField => '音频字段';
+
+  @override
+  String get companionVoiceFieldHelper => '返回 JSON 时，音频在哪个字段（base64 或链接），比如 data.audio；直接返回音频就留空';
+
+  @override
+  String get companionVoicePrivacy => '她要说的话会发给你填的这个服务。';
+
+  @override
+  String get companionVoicePreview => '试听';
+
+  @override
+  String get companionVoicePreviewing => '正在请求…';
+
+  @override
+  String get companionVoicePreviewOk => '能用，听到了吗？';
+
+  @override
+  String companionVoicePreviewFailed(String reason) {
+    return '没成功：$reason';
+  }
+
+  @override
+  String get companionVoiceNotSetUp => '先把上面的地址填好。';
+
+  @override
+  String get companionVoiceFallback => '外接的声音这次没连上，先用了手机自带的声音';
+
+  @override
+  String get companionGreetFirstNameless => '你好呀，以后我就住在这里了，请多指教。';
+
+  @override
+  String companionRenamed(String name) {
+    return '「$name」……好，以后我就叫这个名字啦。';
+  }
+
+  @override
+  String get companionVoicePreset => '常用服务';
+
+  @override
+  String get companionVoicePresetHint => '小米 MiMo、OpenAI、硅基流动、阿里云百炼：填个 Key 就能用';
+
+  @override
+  String get companionVoiceService => '服务';
+
+  @override
+  String companionVoiceKeyWhere(String site) {
+    return '在 $site 申请；存在这台手机的安全存储里';
+  }
+
+  @override
+  String get companionVoiceVoiceCustomHelper => '点一个，或者直接填服务给的音色 ID';
+
+  @override
+  String get companionVoiceStyle => '说话风格';
+
+  @override
+  String get companionVoiceStyleHelper => '描述她说话的语气，服务会照着读；留空用默认的温柔少女音';
+
+  @override
+  String get companionVoiceFemale => '女声';
+
+  @override
+  String get companionVoiceMale => '男声';
+
+  @override
+  String get companionClonePreset => '预置音色';
+
+  @override
+  String get companionCloneMine => '克隆声音';
+
+  @override
+  String get companionVoicePresetVoice => '预置音色';
+
+  @override
+  String get companionCloneRecording => '录音';
+
+  @override
+  String get companionCloneHelper => '5–30 秒、只有一个人在说话、没有背景音的 mp3 或 wav，最大 7 MB。请只用你自己的声音，或本人同意过的声音。她说的每句话都会带上这段录音发给小米。';
+
+  @override
+  String get companionCloneNone => '还没有录音';
+
+  @override
+  String companionCloneReady(String detail) {
+    return '已上传 · $detail';
+  }
+
+  @override
+  String companionCloneSeconds(int n) {
+    return '$n 秒';
+  }
+
+  @override
+  String get companionClonePick => '选一段录音';
+
+  @override
+  String get companionCloneReplace => '换一段';
+
+  @override
+  String get companionCloneTooLarge => '录音太大了，最大 7 MB。剪短一点再试。';
+
+  @override
+  String get companionCloneNotAudio => '只支持 mp3 或 wav 格式的录音。';
+
+  @override
+  String get companionCloneFailed => '没能读取这段录音。';
+
+  @override
+  String get companionMenuPersona => '她的设定';
+
+  @override
+  String get companionPersonaName => '名字';
+
+  @override
+  String get companionPersonaNameHelper => '留空用素材包里的名字';
+
+  @override
+  String get companionPersonaCallMe => '她怎么叫你';
+
+  @override
+  String get companionPersonaCallMeHint => '比如 小周';
+
+  @override
+  String get companionPersonaCallMeHelper => '留空就不特别称呼';
+
+  @override
+  String get companionPersonaText => '人设';
+
+  @override
+  String get companionPersonaTextLabel => '她是谁、怎么说话';
+
+  @override
+  String get companionPersonaTextHelper => '性格、身份、说话方式、哪些话不说，都写在这里，删改随你。只有表情动作的标记格式由 App 自动加上。';
+
+  @override
+  String get companionPersonaReset => '恢复默认';
+
+  @override
+  String get companionPersonaFooter => '轻量模式下一句就生效；完整模式会在你下一条消息里把新设定告诉她。';
 
   @override
   String get engineNewChatDefaultsLast => '新对话默认（上次选择）';
@@ -8339,6 +9027,102 @@ class L10nZh extends L10n {
   String get mediaSettingsEnabledHint => '关闭后不再用这个服务生成';
 
   @override
+  String get mediaConfigKeySaved => '已保存 · 未验证';
+
+  @override
+  String get mediaConfigKeyUnknown => '状态未知';
+
+  @override
+  String get mediaConfigKeyNote => '密钥是否存在以主机返回为准。保存不代表已验证身份或模型权限。';
+
+  @override
+  String mediaConfigConsumers(String services) {
+    return '使用此密钥的媒体服务：$services。修改或移除会影响这些服务；主机上的其他集成也可能使用它。';
+  }
+
+  @override
+  String get mediaConfigCheck => '检查已保存配置';
+
+  @override
+  String get mediaConfigCheckNote => '仅检查本地配置快照，不请求供应商，不产生生成费用。不验证密钥、连通性、余额、模型权限或地区；配置是否接受仍以主机为准。';
+
+  @override
+  String get mediaConfigCheckReady => '未发现本地配置问题';
+
+  @override
+  String get mediaConfigCheckMissingKey => '主机尚未报告已保存的密钥。';
+
+  @override
+  String get mediaConfigCheckModels => '未选择模型，或部分已选模型不在目录中、协议不匹配。';
+
+  @override
+  String get mediaConfigCheckDisabled => '此服务已关闭。';
+
+  @override
+  String get mediaConfigUrlInvalid => '请输入含主机名的 HTTPS API 根地址，不得包含凭据、查询参数、片段或空白。';
+
+  @override
+  String get mediaConfigUrlEndpoint => '这看起来是请求端点。请填写 API 根地址，主机会自动追加请求路径。';
+
+  @override
+  String get mediaConfigUrlRoot => '此协议只需来源地址（https://主机名），不要填写 API 路径。';
+
+  @override
+  String get mediaConfigUrlHint => '填写 API 根地址，而非生成端点。OpenAI 兼容服务保留其路径前缀（如 /v1）。';
+
+  @override
+  String get mediaConfigPreview => '创建请求预览';
+
+  @override
+  String get mediaConfigPreviewNote => '仅预览生成/创建请求；编辑和查询状态可能使用不同路径。预览不代表连通或已获主机接受。';
+
+  @override
+  String get mediaConfigPreviewUnavailable => '此主机目录未提供请求路径。';
+
+  @override
+  String get mediaConfigTargetTitle => '将密钥用于不同目标？';
+
+  @override
+  String mediaConfigTargetBody(String before, String after) {
+    return '目标将从 $before 更改为 $after。后续请求可能向新目标发送所引用的密钥，仅在信任该目标时继续。主机仍会校验此更改。';
+  }
+
+  @override
+  String get mediaConfigTargetConfirm => '信任目标并继续';
+
+  @override
+  String get mediaVideoLoading => '正在加载视频…';
+
+  @override
+  String get mediaVideoCannotPlay => '无法在 App 内播放此视频，请重试或使用其他应用打开。';
+
+  @override
+  String get mediaVideoPlay => '播放';
+
+  @override
+  String get mediaVideoPause => '暂停';
+
+  @override
+  String get mediaVideoSaveFailed => '视频保存失败，请重试。';
+
+  @override
+  String get mediaImageLoading => '正在加载图片';
+
+  @override
+  String get mediaImageReload => '重新加载';
+
+  @override
+  String get mediaImageReloadHint => '只重新读取文件，不会重新生成或收费';
+
+  @override
+  String get mediaVideoNoPoster => '轻点播放视频';
+
+  @override
+  String mediaSavedFilesCount(int count) {
+    return '已保存 $count 个文件到相册';
+  }
+
+  @override
   String get nearbyThisChat => '本对话';
 
   @override
@@ -8572,6 +9356,9 @@ class L10nZh extends L10n {
 
   @override
   String get phoneEngineResetTitle => '重置运行环境？';
+
+  @override
+  String get phoneResetAlsoDeletes => '家目录（/root）里没有保留的内容也会一起删除，包括工作区里的文件、AGENTS.md，以及插件自己存的数据（比如记忆）。';
 
   @override
   String get phoneEngineKeepUiSkills => '保留界面配置和技能';
@@ -9454,6 +10241,12 @@ class L10nZh extends L10n {
 
   @override
   String get phoneSafeRestoreFailed => '没能恢复';
+
+  @override
+  String get phoneSafeStopIncomplete => '还无法确认引擎已停止，未更改配置。请查看引擎日志后重试。';
+
+  @override
+  String get phoneSafeRestartIncomplete => '配置操作已完成，但引擎还未停止，暂未重启。请等待停止完成后再启动。';
 
   @override
   String get phoneSafeRestoreIntro => 'DSH 会回到上次正常运行时的配置：';
@@ -13886,6 +14679,9 @@ class L10nZh extends L10n {
   String get searchKwEngineUninstall => '卸载,删除运行环境,释放空间';
 
   @override
+  String get searchKwWorkspaceRecovery => '工作区,索引,救援,对话打不开,对话不见了,恢复对话';
+
+  @override
   String get searchKwAddProvider => '添加模型,新渠道,自定义模型,Base URL';
 
   @override
@@ -15015,6 +15811,20 @@ class L10nZh extends L10n {
   String get starSettingsTitle => '给 DSH Go 点个 star';
 
   @override
+  String get phoneStartupFailureStopping => '启动失败，正在停止';
+
+  @override
+  String phoneStartupFailureStoppingDetail(String reason) {
+    return '启动失败，正在停止。$reason';
+  }
+
+  @override
+  String get phoneStartupTokenTimeout => '启动等待已超时（180 秒内未收到启动标记），请查看日志';
+
+  @override
+  String get phoneStartupPortNotReady => '已收到启动标记，但本机服务端口尚未就绪，请查看日志';
+
+  @override
   String get stateDiagnosticsSubject => 'DSH Go 诊断包';
 
   @override
@@ -15523,6 +16333,12 @@ class L10nZh extends L10n {
 
   @override
   String get stateEngineUnsupported => '当前引擎版本不支持';
+
+  @override
+  String get stateEngineServiceUnavailable => '所需的引擎服务未就绪，请查看引擎日志或导出诊断包';
+
+  @override
+  String get stateEngineOperationUnavailable => '引擎当前无法执行此操作，请查看引擎日志';
 
   @override
   String get stateSettingsRefreshed => '刚在别处改过，已刷新';
@@ -17075,28 +17891,162 @@ class L10nZh extends L10n {
   String get viewUiMultiple => '可多选';
 
   @override
-  String get viewSuggestWorkspace => '看看工作区有什么';
+  String get viewSuggestWorkspace => '看看工作区';
 
   @override
   String get viewSuggestWorkspacePrompt => '看看工作区里现在有哪些文件和项目，简单介绍一下。';
 
   @override
-  String get viewSuggestWordCount => '写个词频统计脚本';
+  String get viewSuggestWordCount => '写个小脚本';
 
   @override
   String get viewSuggestWordCountPrompt => '写一个 Python 脚本：统计一个文本文件里出现最多的 20 个词，并运行一次给我看结果。';
 
   @override
-  String get viewSuggestNode => '新建 Node.js 项目';
+  String get viewSuggestNode => '新建项目';
 
   @override
   String get viewSuggestNodePrompt => '在工作区新建一个 Node.js 项目，配好 TypeScript 和一个最小的单元测试。';
 
   @override
-  String get viewSuggestGit => 'rebase 还是 merge';
+  String get viewSuggestGit => '讲讲 Git';
 
   @override
   String get viewSuggestGitPrompt => '用一个具体例子解释 git rebase 和 git merge 的区别，各自什么时候用。';
+
+  @override
+  String get viewSuggestWorkspaceHint => '列出文件和项目';
+
+  @override
+  String get viewSuggestWordCountHint => '统计词频并跑一次';
+
+  @override
+  String get viewSuggestNodeHint => 'Node.js 带测试';
+
+  @override
+  String get viewSuggestGitHint => 'rebase 和 merge';
+
+  @override
+  String get viewTipNext => '下一条小技巧';
+
+  @override
+  String viewTipLabel(String value) {
+    return '小技巧：$value';
+  }
+
+  @override
+  String get viewTipSteer => '生成中长按发送键，可以插话、排队或打断';
+
+  @override
+  String get viewTipMidRun => 'AI 干活时也能发消息，它下一步就会看到';
+
+  @override
+  String get viewTipSlash => '输入 / 唤出指令：压缩上下文、切换模型等';
+
+  @override
+  String get viewTipMention => '输入 @ 可以引用工作区里的文件或别的对话';
+
+  @override
+  String get viewTipReplyMenu => '长按 AI 的回复，可以复制、引用或重新生成';
+
+  @override
+  String get viewTipEditResend => '长按自己的消息，可以改写后重发，原对话不动';
+
+  @override
+  String get viewTipQuote => '选中回复里的一段，点「引用」就只追问那一段';
+
+  @override
+  String get viewTipTitleDetails => '点顶部的对话标题，能看改动、文件和终端';
+
+  @override
+  String get viewTipContextRing => '发送键旁的小圆环是上下文用量，点开看详情';
+
+  @override
+  String get viewTipDrawerMenu => '长按侧栏里的对话，可以置顶、改名或归档';
+
+  @override
+  String get viewTipSearch => '主机支持时，搜索对话还能搜到聊天内容，不只是标题';
+
+  @override
+  String get viewTipSettingsSearch => '长按侧栏的设置键，可以直接搜索设置项';
+
+  @override
+  String get viewTipQuickPanel => '在对话页向左滑，打开快捷入口';
+
+  @override
+  String get viewTipFolderNewChat => '长按侧栏的文件夹，可以直接在里面开新对话';
+
+  @override
+  String get viewTipSwitchHost => '点侧栏底部的主机名，可以切到电脑上的 DSH';
+
+  @override
+  String get viewTipPasteImage => '输入法里的截图和贴图，可以直接贴进输入框';
+
+  @override
+  String get viewTipLauncher => '长按桌面图标，可以直接语音提问或开新对话';
+
+  @override
+  String get viewTipPetBubble => '宠物冒泡时点一下，就跳到等你的那个对话';
+
+  @override
+  String get viewTipPetPlay => '连点宠物三下会挠痒痒，长按可以换宠物';
+
+  @override
+  String get viewTipActivityStrip => '生成时点一下状态条，看这一轮的完整轨迹';
+
+  @override
+  String get viewTipImageZoom => '看图时双击放大、双指缩放，长按可以保存';
+
+  @override
+  String get viewTipQueuedRecall => '排队中的消息可以撤回到输入框再改';
+
+  @override
+  String get viewTipKeyboard => '接了键盘：Ctrl+Enter 发送，连按两次 Esc 停止';
+
+  @override
+  String get viewTipShareIn => '在别的 App 里分享文字或图片给 DSH Go，会填进新对话';
+
+  @override
+  String get viewTipShareSelect => '分享对话时长按再滑动，可以一次选中多条消息';
+
+  @override
+  String get viewTipChartDrag => '回复里的图表可以左右拖动，看每个点的数值';
+
+  @override
+  String get viewTipCopyPath => '改动卡里长按某个文件，可以复制它的路径';
+
+  @override
+  String get viewTipCompanion => '「伙伴小屋」藏在切换主机的面板里';
+
+  @override
+  String get viewTipAnswerInline => 'AI 向你提问时，直接在输入框里打字就是回答';
+
+  @override
+  String get viewTipWallpaper => '壁纸可以拖动、缩放，还能调模糊和明暗';
+
+  @override
+  String get viewTipModelHere => '这里就能换模型、预设和权限，只对这次对话生效';
+
+  @override
+  String get viewNewChatFolder => '文件夹';
+
+  @override
+  String get viewNewChatPresetTitle => '这次对话的预设';
+
+  @override
+  String get viewNewChatPermissionTitle => '这次对话的权限';
+
+  @override
+  String get viewNewChatDefault => '默认';
+
+  @override
+  String get viewNewChatUnavailable => '不可用';
+
+  @override
+  String get viewNewChatChange => '更改';
+
+  @override
+  String get viewNewChatModesFailed => '没能设置预设或权限，消息还没发出';
 
   @override
   String get viewGreetingMorning => '早上好';
@@ -18336,4 +19286,48 @@ class L10nZh extends L10n {
   String webConnectHostFirst(String name) {
     return '还没连上「$name」，连上后再打开网页版';
   }
+
+  @override
+  String get workspaceRecoveryTitle => '工作区索引救援';
+
+  @override
+  String get workspaceRecoveryEnable => '启用工作区索引救援';
+
+  @override
+  String get workspaceRecoveryDisable => '恢复使用原索引';
+
+  @override
+  String get workspaceRecoveryHint => '仅本机：原工作区索引异常时，使用另一份索引访问可读取的对话。';
+
+  @override
+  String get workspaceRecoveryActive => '已选择独立救援索引；原索引和救援索引都会保留。';
+
+  @override
+  String get workspaceRecoveryWorking => '处理中…';
+
+  @override
+  String get workspaceRecoveryEnableBody =>
+      '将停止本机引擎，改用独立救援索引后重新启动。原工作区索引保持不动，对话文件、插件和凭据不删除。\n\n首次启用时，新索引从可读取的会话及其仍存在的目录建立。旧工作区名称、顺序、默认、归档和置顶等设置不会自动继承；空工作区或目录已失效的会话不保证出现在新列表中。本机原有分组和置顶偏好保留。\n\n救援索引会保留，下次启用继续使用。这是绕过原索引故障，未修复原索引。';
+
+  @override
+  String get workspaceRecoveryDisableBody =>
+      '将停止本机引擎，恢复使用原工作区索引后重新启动。原故障可能再次出现。\n\n救援期间产生的对话文件和救援索引都会保留；两个索引的工作区关系和排序不会自动同步。原索引可能不显示救援期间新增的会话，再次启用可继续使用救援索引。';
+
+  @override
+  String get workspaceRecoveryEnableStart => '启用并重启';
+
+  @override
+  String get workspaceRecoveryDisableStart => '使用原索引并重启';
+
+  @override
+  String get workspaceRecoveryUnavailable => '当前版本尚不支持工作区索引救援，请检查本机引擎状态并更新应用。';
+
+  @override
+  String get workspaceRecoveryRestartIncomplete => '索引模式已切换，但还无法确认引擎已停止，未重新启动。请等停止完成后再启动。';
+
+  @override
+  String get workspaceRecoverySaveFailed => '索引模式保存失败，未请求重新启动。请查看本机引擎状态和日志。';
+
+  @override
+  String get workspaceRecoveryFailed => '操作未完成，请查看本机引擎状态和日志。已切换的模式可在本页确认。';
 }
