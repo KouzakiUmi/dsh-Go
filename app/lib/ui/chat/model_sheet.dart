@@ -556,9 +556,14 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
       }
     }
 
-    final sheet = SafeArea(
-      top: false,
-      child: SingleChildScrollView(
+    final sheet = AnimatedPadding(
+      // 搜索框唤起输入法时,弹层随其抬起——与主页 composer 同一套动效。
+      duration: AppMotion.of(context, AppMotion.quick),
+      curve: AppMotion.std,
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
         padding: const EdgeInsets.only(bottom: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -596,6 +601,7 @@ class _ModelSheetState extends ConsumerState<_ModelSheet> {
           ],
         ),
       ),
+    ),
     );
     return UiTrace(scope: 'models', child: sheet);
   }
