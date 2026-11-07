@@ -335,7 +335,9 @@ void main() {
       await tester.pump();
       await tester.tap(find.byIcon(AppIcons.send));
       await pumpFrames(tester, 6);
-      expect(find.text('选择模型'), findsOneWidget);
+      // Our picker has no title row; the model cards are the content.
+      expect(find.byType(SheetDragHandle), findsOneWidget);
+      expect(find.text('V4 Pro'), findsOneWidget);
       await tester.tap(find.byType(SheetDragHandle));
       await pumpFrames(tester, 6);
 

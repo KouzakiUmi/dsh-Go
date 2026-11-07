@@ -10,6 +10,7 @@ import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/models_state.dart';
 import 'package:dsh_app/state/sessions_state.dart';
 import 'package:dsh_app/ui/chat/chat_header.dart';
+import 'package:dsh_app/ui/common/app_sheet.dart';
 import 'package:dsh_app/ui/chat/chat_screen.dart';
 import 'package:dsh_app/ui/chat/composer.dart';
 import 'package:dsh_app/ui/chat/empty_actions.dart';
@@ -422,7 +423,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.byKey(const ValueKey('composer-model')));
       await pumpFrames(tester, 4);
-      expect(find.text('选择模型'), findsOneWidget);
+      // Our picker has no title row; the model cards are the content.
+      expect(find.byType(SheetDragHandle), findsOneWidget);
+      expect(find.text('V41 Flash'), findsOneWidget);
       await tester.tap(find.text('V41 Flash'));
       await pumpFrames(tester, 2);
       final pending = containerOf(tester).read(pendingModelProvider)!;
