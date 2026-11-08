@@ -885,7 +885,8 @@ class _ChannelDropdownLayout extends SingleChildLayoutDelegate {
       anchor != oldDelegate.anchor || safeArea != oldDelegate.safeArea;
 }
 
-/// 展开的渠道下拉列表:浮在模型卡上方,圆角矩形,带阴影。
+/// 展开的渠道菜单:与斜杠面板 / @ 选择器同款的玻璃浮层(连续圆角、发丝
+/// 描边、近乎不透明的背衬),里面是圆角行,不画分隔线。
 class _ChannelDropdownList extends StatelessWidget {
   const _ChannelDropdownList({required this.groups, required this.shown, required this.onSelected});
 
@@ -893,51 +894,47 @@ class _ChannelDropdownList extends StatelessWidget {
   final String shown;
   final ValueChanged<String> onSelected;
 
+  /// 菜单外框与模型卡同档(20),行缩进 6,行自己的圆角 10,同心。
+  static const radius = AppShape.lg;
+  static const inset = 6.0;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final dark = theme.brightness == Brightness.dark;
-    return Container(
-      decoration: ShapeDecoration(
-        color: dark ? const Color(0xFF1C1C1E) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppShape.lg)),
-        shadows: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+    const shape = RoundedSuperellipseBorder(borderRadius: BorderRadius.all(Radius.circular(radius)));
+    return Semantics(
+      container: true,
+      child: GlassSurface(
+        tier: GlassTier.sheet,
+        borderRadius: const BorderRadius.all(Radius.circular(radius)),
+        child: Material(
+          // 浮在活内容上:近乎不透明,关掉模糊时行也不会透出底下。
+          color: DshSurfaces.of(context).backdropTop.withValues(alpha: 0.94),
+          clipBehavior: Clip.antiAlias,
+          shape: shape,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(inset),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < groups.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 2),
+                  _ChannelDropdownItem(
+                    label: groups[i].name,
+                    selected: groups[i].id == shown,
+                    onTap: () => onSelected(groups[i].id),
+                  ),
+                ],
+              ],
+            ),
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppShape.lg),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-            for (var i = 0; i < groups.length; i++) ...[
-              if (i > 0)
-                Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: dark ? Colors.white.withValues(alpha: 0.08) : colors.onSurface.withValues(alpha: 0.06),
-                ),
-              _ChannelDropdownItem(
-                label: groups[i].name,
-                selected: groups[i].id == shown,
-                onTap: () => onSelected(groups[i].id),
-              ),
-            ],
-          ],
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
-/// 下拉列表里的单个渠道项。
+/// 菜单里的一行渠道:10 的连续圆角,与 20 的外框同心;选中行染一层
+/// 主色,行尾打勾。
 class _ChannelDropdownItem extends StatelessWidget {
   const _ChannelDropdownItem({required this.label, required this.selected, required this.onTap});
 
@@ -945,10 +942,15 @@ class _ChannelDropdownItem extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  static const _shape = RoundedSuperellipseBorder(
+    borderRadius: BorderRadius.all(Radius.circular(_ChannelDropdownList.radius - _ChannelDropdownList.inset - 4)),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     final quick = AppMotion.of(context, AppMotion.quick);
     return Semantics(
       button: true,
@@ -962,8 +964,11 @@ class _ChannelDropdownItem extends StatelessWidget {
         child: AnimatedContainer(
           duration: quick,
           curve: AppMotion.std,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: selected ? colors.primary.withValues(alpha: 0.1) : Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: ShapeDecoration(
+            color: selected ? colors.primary.withValues(alpha: dark ? 0.16 : 0.1) : colors.primary.withValues(alpha: 0),
+            shape: _shape,
+          ),
           child: Row(
             children: [
               Expanded(
@@ -973,11 +978,14 @@ class _ChannelDropdownItem extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: selected ? colors.primary : null,
                   ),
                 ),
               ),
-              if (selected)
+              if (selected) ...[
+                const SizedBox(width: 8),
                 Icon(AppIcons.selected, size: 16, color: colors.primary),
+              ],
             ],
           ),
         ),
@@ -1013,7 +1021,8 @@ class _SearchField extends StatelessWidget {
           filled: true,
           fillColor: dark ? Colors.white.withValues(alpha: 0.07) : colors.onSurface.withValues(alpha: 0.06),
           border: const OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(AppShape.lg)),
+            // 输入框词档是 md(14):渠道胶囊(stadium)紧挨在右,圆角分得开。
+            borderRadius: BorderRadius.all(Radius.circular(AppShape.md)),
             borderSide: BorderSide.none,
           ),
           prefixIcon: Icon(AppIcons.search, size: 16, color: colors.onSurfaceVariant),
