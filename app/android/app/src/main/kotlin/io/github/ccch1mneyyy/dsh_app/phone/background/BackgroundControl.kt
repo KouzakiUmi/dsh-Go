@@ -327,6 +327,50 @@ class BackgroundControl private constructor(context: Context) {
 
     fun requestShizukuPermission(then: () -> Unit): Boolean = shizuku.requestPermission(then)
 
+    /** Read-only diagnostics: only the already selected live link; never starts a transport or gate. */
+    fun collectSystemIme(mayStart: () -> Boolean): Map<String, Any?> {
+        val evidence = io.github.ccch1mneyyy.dsh_app.diagnostics.SystemImeEvidence
+        if (!mayStart()) return evidence.result("cancelled")
+        if (PhoneControl.peek()?.tasks?.snapshot()?.active == true || driverTaskId != null)
+            return evidence.result("busy")
+        val selected = synchronized(keepGuard) {
+            if (selectionChange != null || mode == "off") return evidence.result("unavailable")
+            keep.selectionTicket() to channel
+        }
+        val ch = selected.second ?: return evidence.result("unavailable")
+        if (!ch.alive()) return evidence.result("unavailable")
+        val allowed = { mayStart() && selectionChange == null && keep.selectionCurrent(selected.first) && channel === ch }
+        if (!allowed()) return evidence.result("cancelled")
+        return try {
+            val response = ch.execute(Bundle().apply {
+                putString(Proto.OP, Proto.OP_COLLECT_SYSTEM_IME)
+                putInt(Proto.IME_PID, Process.myPid())
+                putLong(Proto.IME_REQUESTED_AT, System.currentTimeMillis())
+            })
+            if (!allowed()) return evidence.result("cancelled")
+            val code = evidence.coreCode(response.getBoolean(Proto.OK), response.getString(Proto.ERROR))
+            if (code != "ok" && code != "noEvents") return evidence.result(code)
+            val at = response.getLong("capturedAt")
+            if (at <= 0 || kotlin.math.abs(System.currentTimeMillis() - at) > 10_000)
+                return evidence.result("failed")
+            val times = response.getLongArray("imeTimes") ?: return evidence.result("failed")
+            val events = response.getStringArray("imeEvents") ?: return evidence.result("failed")
+            val users = response.getIntArray("imeFromUser") ?: return evidence.result("failed")
+            val reasons = response.getStringArray("imeReasons") ?: return evidence.result("failed")
+            val origins = response.getStringArray("imeOrigins") ?: return evidence.result("failed")
+            if (times.size > evidence.MAX_EVENTS || listOf(events.size, users.size, reasons.size, origins.size).any { it != times.size })
+                return evidence.result("failed")
+            val safe = times.indices.map { i ->
+                if (users[i] !in -1..1) return evidence.result("failed")
+                io.github.ccch1mneyyy.dsh_app.diagnostics.SystemImeEvent(times[i], events[i],
+                    when (users[i]) { 1 -> true; 0 -> false; else -> null }, reasons[i], origins[i])
+            }
+            if (safe.any { !evidence.valid(it, at) } || (code == "noEvents") != safe.isEmpty())
+                return evidence.result("failed")
+            evidence.result(code, at, safe)
+        } catch (_: Exception) { evidence.result(if (mayStart()) "unavailable" else "cancelled") }
+    }
+
     // ---- task lifecycle (called by the bridge/core) ------------------------
 
     /** Connects, probes the gate, and registers the driver for the running task. */

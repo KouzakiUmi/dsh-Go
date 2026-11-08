@@ -9536,6 +9536,138 @@ abstract class L10n {
   /// **'轻量模式下一句就生效；完整模式会在你下一条消息里把新设定告诉她。'**
   String get companionPersonaFooter;
 
+  /// No description provided for @systemImeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统输入法诊断'**
+  String get systemImeTitle;
+
+  /// No description provided for @systemImeCollect.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集本次日志'**
+  String get systemImeCollect;
+
+  /// No description provided for @systemImePrivacy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复现后再采集。每次须在原生弹窗确认，仅读取最近 120 秒的固定事件（最多 64 条），不含输入内容或原始日志；不会自动申请权限。'**
+  String get systemImePrivacy;
+
+  /// No description provided for @systemImeEvidenceLimits.
+  ///
+  /// In zh, this message translates to:
+  /// **'请求显示/隐藏不等于键盘实际可见；空结果或采集失败不代表系统正常。'**
+  String get systemImeEvidenceLimits;
+
+  /// No description provided for @systemImeNotCollected.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未采集'**
+  String get systemImeNotCollected;
+
+  /// No description provided for @systemImeCollecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待本次确认或采集结果'**
+  String get systemImeCollecting;
+
+  /// No description provided for @systemImeRetained.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保留本次证据'**
+  String get systemImeRetained;
+
+  /// No description provided for @systemImeNoEvents.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到匹配事件'**
+  String get systemImeNoEvents;
+
+  /// No description provided for @systemImeUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有已选且存活的特权通道'**
+  String get systemImeUnavailable;
+
+  /// No description provided for @systemImeUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前版本或通道不支持采集'**
+  String get systemImeUnsupported;
+
+  /// No description provided for @systemImeDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次采集未获同意'**
+  String get systemImeDenied;
+
+  /// No description provided for @systemImeCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次采集已取消'**
+  String get systemImeCancelled;
+
+  /// No description provided for @systemImeBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'通道忙，请稍后重试'**
+  String get systemImeBusy;
+
+  /// No description provided for @systemImeTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集超时，请重试'**
+  String get systemImeTimeout;
+
+  /// No description provided for @systemImeLimitExceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'超出采集上限，未保留事件'**
+  String get systemImeLimitExceeded;
+
+  /// No description provided for @systemImeFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集失败或响应无效'**
+  String get systemImeFailed;
+
+  /// No description provided for @systemImeEventCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留事件数'**
+  String get systemImeEventCount;
+
+  /// No description provided for @systemImeCapturedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集时间'**
+  String get systemImeCapturedAt;
+
+  /// No description provided for @systemImePermissions.
+  ///
+  /// In zh, this message translates to:
+  /// **'手机操控权限设置（可选）'**
+  String get systemImePermissions;
+
+  /// No description provided for @systemImePermissionsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可自行配置特权通道，无需为诊断强制开启。原有手机授权不代表同意本次采集。'**
+  String get systemImePermissionsHint;
+
+  /// No description provided for @systemImeClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除证据并取消采集'**
+  String get systemImeClear;
+
+  /// No description provided for @systemImeMemory.
+  ///
+  /// In zh, this message translates to:
+  /// **'证据仅存内存，重启清除；新采集会替换旧证据。仅手动“让 AI 看诊断”或导出 ZIP 时包含。清除不会撤回已写入的快照或导出文件。'**
+  String get systemImeMemory;
+
   /// No description provided for @engineNewChatDefaultsLast.
   ///
   /// In zh, this message translates to:

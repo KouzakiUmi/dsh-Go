@@ -97,7 +97,7 @@ internal object PhonePromptUi {
         for (choice in p.ticket.content.choices) {
             val primary = choice in setOf(PromptChoice.ALLOW_ONCE, PromptChoice.ALLOW_APP, PromptChoice.ALLOW_TASK,
                 PromptChoice.OPEN, PromptChoice.CONTINUE)
-            val b = PromptButton(ctx, armedAt, p).apply {
+            val b = PromptButton(ctx, armedAt) { p.live }.apply {
                 text = label(ctx, choice)
                 textSize = 15f; typeface = Typeface.DEFAULT_BOLD
                 setTextColor(if (primary) onAccent else ink)
@@ -150,14 +150,14 @@ internal object PhonePromptUi {
     private fun dp(ctx: Context, value: Int) = (ctx.resources.displayMetrics.density * value).toInt()
 
     /** Same injected/obscured-input boundary as ControlOverlay, also used by the Activity fallback. */
-    private class PromptButton(ctx: Context, private val armedAt: Long, private val p: PromptPresentation) : TextView(ctx) {
+    internal class PromptButton(ctx: Context, private val armedAt: Long, private val live: () -> Boolean) : TextView(ctx) {
         private val a11y = ctx.getSystemService(AccessibilityManager::class.java)
         private var rejected = false
         init { filterTouchesWhenObscured = true; isClickable = true; isFocusable = true; gravity = Gravity.CENTER }
 
         override fun dispatchTouchEvent(event: MotionEvent): Boolean {
             if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                rejected = !PromptInputPolicy.allows(SystemClock.elapsedRealtime(), armedAt, p.live, InjectGuard.active(),
+                rejected = !PromptInputPolicy.allows(SystemClock.elapsedRealtime(), armedAt, live(), InjectGuard.active(),
                     event.flags and (MotionEvent.FLAG_WINDOW_IS_OBSCURED or MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED) != 0)
             }
             if (rejected) {
@@ -167,9 +167,14 @@ internal object PhonePromptUi {
             return super.dispatchTouchEvent(event)
         }
 
+        override fun performClick(): Boolean {
+            if (!PromptInputPolicy.allows(SystemClock.elapsedRealtime(), armedAt, live(), InjectGuard.active(), false)) return false
+            return super.performClick()
+        }
+
         override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean {
             if ((action == AccessibilityNodeInfo.ACTION_CLICK || action == AccessibilityNodeInfo.ACTION_LONG_CLICK) &&
-                (!p.live || SystemClock.elapsedRealtime() < armedAt || InjectGuard.active() || !a11y.isTouchExplorationEnabled)) return false
+                (!live() || SystemClock.elapsedRealtime() < armedAt || InjectGuard.active() || !a11y.isTouchExplorationEnabled)) return false
             return super.performAccessibilityAction(action, arguments)
         }
     }

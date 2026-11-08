@@ -5458,6 +5458,76 @@ class L10nEn extends L10n {
       'Light mode uses it from her next reply; full mode tells her with your next message.';
 
   @override
+  String get systemImeTitle => 'System input-method diagnostics';
+
+  @override
+  String get systemImeCollect => 'Capture recent events';
+
+  @override
+  String get systemImePrivacy =>
+      'Reproduce first. Each attempt needs native confirmation: fixed events from the last 120 seconds, up to 64; no input contents or raw logs. Permissions are never requested automatically.';
+
+  @override
+  String get systemImeEvidenceLimits =>
+      'Show/hide requests do not prove keyboard visibility. Empty or failed capture does not mean the system behaved normally.';
+
+  @override
+  String get systemImeNotCollected => 'Not collected';
+
+  @override
+  String get systemImeCollecting => 'Awaiting this attempt’s consent or result';
+
+  @override
+  String get systemImeRetained => 'Evidence retained';
+
+  @override
+  String get systemImeNoEvents => 'No matching events found';
+
+  @override
+  String get systemImeUnavailable => 'No selected, live privileged channel';
+
+  @override
+  String get systemImeUnsupported => 'This version or channel does not support capture';
+
+  @override
+  String get systemImeDenied => 'This attempt was not approved';
+
+  @override
+  String get systemImeCancelled => 'This attempt was cancelled';
+
+  @override
+  String get systemImeBusy => 'Channel busy; try again later';
+
+  @override
+  String get systemImeTimeout => 'Capture timed out; try again';
+
+  @override
+  String get systemImeLimitExceeded => 'Capture limit exceeded; no events retained';
+
+  @override
+  String get systemImeFailed => 'Capture failed or response was invalid';
+
+  @override
+  String get systemImeEventCount => 'Retained events';
+
+  @override
+  String get systemImeCapturedAt => 'Captured at';
+
+  @override
+  String get systemImePermissions => 'Phone-control permissions (optional)';
+
+  @override
+  String get systemImePermissionsHint =>
+      'Configure a privileged channel only if you wish; it is not required for diagnostics. Existing phone permissions are not consent for this capture.';
+
+  @override
+  String get systemImeClear => 'Clear evidence and cancel capture';
+
+  @override
+  String get systemImeMemory =>
+      'Memory only; cleared on restart. A new capture replaces old evidence. Included only in manual AI diagnostics or ZIP exports. Clearing does not retract snapshots or files already exported.';
+
+  @override
   String get engineNewChatDefaultsLast => 'New chat defaults (last choice)';
 
   @override

@@ -5150,6 +5150,72 @@ class L10nZh extends L10n {
   String get companionPersonaFooter => '轻量模式下一句就生效；完整模式会在你下一条消息里把新设定告诉她。';
 
   @override
+  String get systemImeTitle => '系统输入法诊断';
+
+  @override
+  String get systemImeCollect => '采集本次日志';
+
+  @override
+  String get systemImePrivacy => '复现后再采集。每次须在原生弹窗确认，仅读取最近 120 秒的固定事件（最多 64 条），不含输入内容或原始日志；不会自动申请权限。';
+
+  @override
+  String get systemImeEvidenceLimits => '请求显示/隐藏不等于键盘实际可见；空结果或采集失败不代表系统正常。';
+
+  @override
+  String get systemImeNotCollected => '尚未采集';
+
+  @override
+  String get systemImeCollecting => '等待本次确认或采集结果';
+
+  @override
+  String get systemImeRetained => '已保留本次证据';
+
+  @override
+  String get systemImeNoEvents => '未找到匹配事件';
+
+  @override
+  String get systemImeUnavailable => '没有已选且存活的特权通道';
+
+  @override
+  String get systemImeUnsupported => '当前版本或通道不支持采集';
+
+  @override
+  String get systemImeDenied => '本次采集未获同意';
+
+  @override
+  String get systemImeCancelled => '本次采集已取消';
+
+  @override
+  String get systemImeBusy => '通道忙，请稍后重试';
+
+  @override
+  String get systemImeTimeout => '采集超时，请重试';
+
+  @override
+  String get systemImeLimitExceeded => '超出采集上限，未保留事件';
+
+  @override
+  String get systemImeFailed => '采集失败或响应无效';
+
+  @override
+  String get systemImeEventCount => '保留事件数';
+
+  @override
+  String get systemImeCapturedAt => '采集时间';
+
+  @override
+  String get systemImePermissions => '手机操控权限设置（可选）';
+
+  @override
+  String get systemImePermissionsHint => '可自行配置特权通道，无需为诊断强制开启。原有手机授权不代表同意本次采集。';
+
+  @override
+  String get systemImeClear => '清除证据并取消采集';
+
+  @override
+  String get systemImeMemory => '证据仅存内存，重启清除；新采集会替换旧证据。仅手动“让 AI 看诊断”或导出 ZIP 时包含。清除不会撤回已写入的快照或导出文件。';
+
+  @override
   String get engineNewChatDefaultsLast => '新对话默认（上次选择）';
 
   @override

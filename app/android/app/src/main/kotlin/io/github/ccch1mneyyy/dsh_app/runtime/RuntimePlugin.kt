@@ -74,7 +74,8 @@ class RuntimePlugin :
             "getStatus" -> result.success(controller.status())
             "publishDiagnostics" -> {
                 val markdown = call.argument<String>("markdown")
-                result.success(if (markdown == null || markdown.length > 256 * 1024) null else controller.publishDiagnostics(markdown))
+                val manual = call.argument<Any?>("manual") == true
+                result.success(if (markdown == null || markdown.length > 256 * 1024) null else controller.publishDiagnostics(markdown, manual = manual))
             }
             "installManagedSkill" -> {
                 val owner = managedSkillOwner

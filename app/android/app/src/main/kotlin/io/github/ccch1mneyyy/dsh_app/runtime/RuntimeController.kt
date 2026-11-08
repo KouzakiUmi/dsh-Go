@@ -261,10 +261,10 @@ class RuntimeController private constructor(private val app: Context) : DshProce
      * engine came up or when the person asks from 设置 → 诊断. Null when the runtime is
      * not installed or the write failed.
      */
-    fun publishDiagnostics(markdown: String): Map<String, Any?>? = try {
+    fun publishDiagnostics(markdown: String, manual: Boolean = false): Map<String, Any?>? = try {
         if (!installer.isCurrent()) null
         else {
-            val file = GuestSetup.writeDiagnostics(installer.rootfs, markdown, safe = currentModeSafe())
+            val file = GuestSetup.writeDiagnostics(installer.rootfs, markdown, safe = currentModeSafe(), manual = manual)
             mapOf("path" to file.absolutePath, "bytes" to file.length())
         }
     } catch (_: Exception) {

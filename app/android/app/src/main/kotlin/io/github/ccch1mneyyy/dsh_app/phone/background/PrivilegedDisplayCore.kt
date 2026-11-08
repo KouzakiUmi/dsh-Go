@@ -88,6 +88,24 @@ class PrivilegedDisplayCore(private val context: Context) {
                 response.putString("revision", Proto.REVISION)
                 return response
             }
+            if (op == Proto.OP_COLLECT_SYSTEM_IME) {
+                // Independent of display ownership, gates, UiAutomation and injection.
+                val evidence = io.github.ccch1mneyyy.dsh_app.diagnostics.SystemImeEvidence
+                val now = System.currentTimeMillis()
+                // An old queued IPC must not begin a new read after its prompt expired.
+                val capture = if (evidence.requestFresh(request.getLong(Proto.IME_REQUESTED_AT), now))
+                    io.github.ccch1mneyyy.dsh_app.diagnostics.SystemImeLogcat.collect(request.getInt(Proto.IME_PID))
+                else io.github.ccch1mneyyy.dsh_app.diagnostics.SystemImeLogcat.Capture("timeout", now)
+                response.putBoolean(Proto.OK, capture.code == "ok" || capture.code == "noEvents")
+                response.putString(Proto.ERROR, capture.code)
+                response.putLong("capturedAt", capture.capturedAt)
+                response.putLongArray("imeTimes", capture.events.map { it.timestamp }.toLongArray())
+                response.putStringArray("imeEvents", capture.events.map { it.event }.toTypedArray())
+                response.putIntArray("imeFromUser", capture.events.map { when (it.fromUser) { true -> 1; false -> 0; null -> -1 } }.toIntArray())
+                response.putStringArray("imeReasons", capture.events.map { it.reason }.toTypedArray())
+                response.putStringArray("imeOrigins", capture.events.map { it.origin }.toTypedArray())
+                return response
+            }
             if (op == Proto.OP_DESTROY) {
                 releaseAll()
                 response.putBoolean(Proto.OK, true)

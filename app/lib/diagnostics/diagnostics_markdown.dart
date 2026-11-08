@@ -12,6 +12,7 @@ import 'redact.dart';
 const diagnosticsEngineLines = 80;
 const diagnosticsFailureLines = 60;
 const diagnosticsErrorLines = 10;
+const diagnosticsSystemImeEvents = 12;
 
 /// Hard cap: a diagnostics file that costs more context than this is no
 /// longer worth reading. The zip export stays available for everything else.
@@ -25,6 +26,7 @@ String diagnosticsMarkdown(DiagnosticsSnapshot s, {int maxBytes = diagnosticsMar
     ..writeln()
     ..writeln('> App 写在引擎里的环境快照，给排查问题用；已脱敏。生成时间：${_time(s.at)}。')
     ..writeln();
+  _systemIme(b, s);
   _environment(b, s);
   _connection(b, s);
   _phone(b, s);
@@ -50,6 +52,27 @@ String _utf8Prefix(List<int> bytes, int budget) {
     end--;
   }
   return utf8.decode(bytes.sublist(0, end));
+}
+
+void _systemIme(StringBuffer b, DiagnosticsSnapshot s) {
+  final evidence = s.systemIme;
+  if (evidence == null) return;
+  final at = DateTime.fromMillisecondsSinceEpoch(evidence.capturedAt, isUtc: true);
+  b
+    ..writeln('## System IME evidence (manual, privilegedIme)')
+    ..writeln('- capturedAt: ${at.toIso8601String()} · code: ${evidence.code} · events: ${evidence.events.length}')
+    ..writeln('- Fixed events only; preceding 120 seconds, maximum 64. Retained capture, not live monitoring.')
+    ..writeln('- Requests do not prove keyboard visibility. fromUser=null means unknown, not false.');
+  if (evidence.events.isEmpty) {
+    b.writeln('- No usable events: empty/failed capture is NOT evidence that the system behaved normally.');
+  } else {
+    final recent = evidence.events.reversed.take(diagnosticsSystemImeEvents).toList().reversed;
+    b.writeln('- Most recent ${recent.length} events (ZIP contains the full bounded capture):');
+    for (final event in recent) {
+      b.writeln('  - ${event.timestamp} ${event.event} fromUser=${event.fromUser} reason=${event.reason} origin=${event.origin}');
+    }
+  }
+  b.writeln();
 }
 
 void _environment(StringBuffer b, DiagnosticsSnapshot s) {

@@ -49,6 +49,9 @@ object Proto {
     const val OP_RELEASE = "release"
     const val OP_DESTROY = "destroy"
     const val OP_GATE = "gate"
+    const val OP_COLLECT_SYSTEM_IME = "collectSystemIme"
+    const val IME_PID = "imePid"
+    const val IME_REQUESTED_AT = "imeRequestedAt"
 
     /** 自动恢复无障碍: grants [APP_PACKAGE] WRITE_SECURE_SETTINGS in [USER]; nothing else is grantable. */
     const val OP_GRANT_SECURE_SETTINGS = "grantSecureSettings"
