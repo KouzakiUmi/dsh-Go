@@ -1,7 +1,8 @@
 // Measured symmetry of a plugin's configuration page: the save bar's two
 // equal, mirrored buttons on the cards' gutter with the status centred over
-// them; the search capsule, the web row and the folded 「高级」 card on the
-// same column as the fields; and a narrow phone at large text that neither
+// them; the search capsule, the fields and the folded 「高级」 card on the
+// same column as the fields, with no card above them even for a plugin that
+// ships its own web page; and a narrow phone at large text that neither
 // overflows nor squeezes the buttons apart.
 
 import 'package:dsh_app/ui/plugins/config/plugin_config_page.dart';
@@ -44,7 +45,7 @@ void main() {
     expect(screen.bottom - right.bottom, closeTo(12 + bottomInset, 0.5), reason: 'above the gesture bar');
   });
 
-  testWidgets('search, the web row, the fields and 高级 share one column', (tester) async {
+  testWidgets('search, the fields and 高级 share one column', (tester) async {
     await pumpConfigPage(tester, const PluginConfigPage(ns: 'speech-to-text-sensevoice'), sampleConfigApi());
     final screen = tester.getRect(find.byType(MaterialApp));
     final search = tester.getRect(find.byKey(const ValueKey('plugin-config-search')));
@@ -57,12 +58,13 @@ void main() {
     expect(fields.left - screen.left, closeTo(screen.right - fields.right, 0.5), reason: 'centred column');
     expect(fields.left - screen.left, 16);
 
+    // 删掉「在网页版设置」之后:插件自带网页页时,表单的那张卡就是这一列的
+    // 第一张,上面不多出任何一组。
     await pumpConfigPage(tester, const PluginConfigPage(ns: 'weather'), sampleConfigApi());
-    final web = _card(tester, find.text('在网页版设置'));
+    expect(find.text('在网页版设置'), findsNothing, reason: 'no card above the form any more');
     final form = _card(tester, find.text('城市'));
-    expect(web.left, form.left);
-    expect(web.right, form.right);
-    expect(form.top - web.bottom, 24, reason: 'the gap between groups');
+    expect(form.left, fields.left);
+    expect(form.right, fields.right);
   });
 
   testWidgets('360 wide at 1.3x text: no overflow, the buttons stay equal', (tester) async {

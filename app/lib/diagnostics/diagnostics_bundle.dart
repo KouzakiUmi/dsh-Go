@@ -20,9 +20,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../phone/phone_channel.dart';
 import '../runtime/runtime_bridge.dart';
 import '../performance/performance_state.dart';
+import '../plugins/seams/seat_models.dart';
+import '../plugins/seams/seat_state.dart';
+import '../plugins/seams/slot_catalog.dart';
 import '../runtime/runtime_state.dart';
 import '../state/app_info.dart';
 import '../state/connection_state.dart';
+import '../state/plugin_config/plugin_config_state.dart';
 import '../state/settings_state.dart';
 import '../state/phone_state.dart' show phoneChannelProvider;
 import '../state/voice_settings.dart';
@@ -50,6 +54,7 @@ class DiagnosticsSnapshot {
     this.engineLog = const [],
     this.failureLog = const [],
     this.appErrors = const [],
+    this.plugins = const {},
     this.systemIme,
   });
 
@@ -69,6 +74,11 @@ class DiagnosticsSnapshot {
   final List<String> engineLog;
   final List<String> failureLog;
   final List<AppErrorRecord> appErrors;
+
+  /// The plugin seats and configuration entries as the app resolved them:
+  /// which slot occupant became native / island / webLink, and why an entry
+  /// is not configurable. Empty on a host that has no plugins.
+  final Map<String, Object?> plugins;
 
   /// Only a deliberate manual publication/export includes retained opt-in evidence.
   final SystemImeEvidence? systemIme;
@@ -179,6 +189,7 @@ abstract final class DiagnosticsBundle {
     return [
       jsonFile('summary.json', summary(s)),
       jsonFile('settings.json', settingsSummary(s.settings)),
+      if (s.plugins.isNotEmpty) jsonFile('plugins.json', s.plugins),
       if (s.systemIme case final evidence?) jsonFile('system-ime.json', evidence.toJson()),
       if (crash != null) jsonFile('crash.json', crash),
       if (s.engineLog.isNotEmpty) text('engine.log', log(s.engineLog)),
@@ -235,6 +246,54 @@ Future<DiagnosticsSnapshot> collectDiagnostics(Ref ref, DateTime at, {bool inclu
     engineLog: engineLog,
     failureLog: failureLog,
     appErrors: appErrorLog.snapshot(),
+    plugins: pluginSeats(ref),
     systemIme: systemIme?.evidence,
   );
+}
+
+/// 设置 › 能力 里每一项最终落在哪个 seat(native / island / webLink)、以及
+/// 插件配置 entry 不可配置的原因。只读,用于定位「插件设置进不去」。
+Map<String, Object?> pluginSeats(Ref ref) {
+  try {
+    // 只读已经活着的插件状态:诊断导出不能顺手把连接初始化起来。
+    final inventory = ref.exists(seatInventoryProvider) ? ref.read(seatInventoryProvider) : null;
+    final config = ref.exists(pluginConfigProvider) ? ref.read(pluginConfigProvider).value : null;
+    if (inventory == null && config == null) return const {};
+    final seats = <Map<String, Object?>>[];
+    if (inventory != null) {
+      for (final slot in const [Slots.settingsSection, Slots.generalItem]) {
+        final plan = ref.read(seatPlanProvider(SeatRequest(slot: slot, placement: SeatPlacement.row)));
+        for (final item in plan.visible) {
+          seats.add({
+            'slot': slot,
+            'package': item.occupant.package,
+            'cell': item.occupant.cell,
+            'mode': item.mode.name,
+            'namespace': ?item.configNamespace,
+          });
+        }
+      }
+    }
+    return {
+      'packages': [
+        for (final p in inventory?.packages.values ?? const <PluginClientInfo>[])
+          {
+            'package': p.package,
+            'installed': p.installed,
+            'enabled': p.enabled,
+            'hasClient': p.hasClient,
+            'rowIds': p.rowIds,
+            'configNamespaces': p.configNamespaces,
+            'fallbackNamespaces': p.fallbackNamespaces,
+          },
+      ],
+      'seats': seats,
+      'entries': {
+        for (final e in config?.entries.values ?? const <PluginConfigEntry>[])
+          e.entryId: {'state': e.state, 'configurable': e.configurable, 'reason': e.reason, 'owner': e.owner},
+      },
+    };
+  } catch (error) {
+    return {'error': '$error'};
+  }
 }

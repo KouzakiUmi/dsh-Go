@@ -497,7 +497,7 @@ void main() {
   });
 
   group('settings hub', () {
-    testWidgets('a section with an island opens its page; one without, DSH Web', (tester) async {
+    testWidgets('a section with an island and one without both open a page of their own', (tester) async {
       await _pump(
         tester,
         const SettingsScreen(),
@@ -505,12 +505,22 @@ void main() {
         seats: seatOverrides(inventory: seatInventory(occupancy: fullOccupancy)),
       );
       await _reveal(tester, find.text('桌宠提醒'));
+      // 没有岛没法先渲染的那一项也进页面本身:页面自己说「在网页版打开」,
+      // 而不是这一行直接把设置弹到网页版去。
       await tester.tap(find.text('桌宠提醒'));
-      expect(openedWeb.single, const DshWebTarget(settings: DshWebSettings.general));
+      await _settle(tester);
+      expect(find.byType(PluginSeatPage), findsOneWidget);
+      expect(find.byType(FakeIsland), findsNothing);
+      expect(find.text('在网页版打开'), findsOneWidget);
+      expect(openedWeb, isEmpty, reason: 'the row itself goes nowhere else');
+
+      await tester.tap(find.byTooltip('返回'));
+      await _settle(tester);
       await tester.tap(find.text('岛屿探针'));
       await _settle(tester);
       expect(find.byType(PluginSeatPage), findsOneWidget);
       expect(find.byType(FakeIsland), findsOneWidget);
+      expect(openedWeb, isEmpty);
     });
 
     testWidgets('no rows without plugin sections', (tester) async {

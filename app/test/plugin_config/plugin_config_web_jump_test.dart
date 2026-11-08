@@ -1,9 +1,9 @@
-// From a plugin's native configuration page to DSH Web, which edits the same
-// configuration through its own page: never while a save is reloading the
-// plugin (it would land on a plugin in the middle of its reload), held edits
-// asked about and dropped before going (kept, a later 保存 would write them
-// over what was set there), and the form's own 「在网页版编辑此项」 rows going
-// the same way, to the plugin's card rather than to an entry id no card has.
+// A plugin's native configuration page carries no card to DSH Web any more
+// (f335e20): the form is drawn whenever it can be, and a data refresh after a
+// save does not push it out for a button. The ways to DSH Web that remain are
+// a form row of its own (「在网页版编辑此项」, asking before it drops held edits)
+// and an entry id from elsewhere in the app (网页模式): both land on the
+// plugin's card rather than on an entry id no card has.
 
 import 'dart:async';
 
@@ -11,7 +11,6 @@ import 'package:dsh_app/state/plugin_config/plugin_config_memory.dart';
 import 'package:dsh_app/state/plugin_config/plugin_config_state.dart';
 import 'package:dsh_app/state/plugins_state.dart' show installedPluginsProvider;
 import 'package:dsh_app/state/ui_mode_state.dart';
-import 'package:dsh_app/ui/engine_settings/field_row.dart';
 import 'package:dsh_app/ui/plugins/config/plugin_config_page.dart';
 import 'package:dsh_app/ui/plugins/seats/seat_links.dart' show seatWebOpenerProvider;
 import 'package:dsh_app/ui/web/dsh_web_launcher.dart';
@@ -24,7 +23,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../engine_settings/support.dart';
 import 'support.dart';
 
-const _web = ValueKey('plugin-config-web');
 const _primary = ValueKey('plugin-config-primary');
 const _status = ValueKey('plugin-config-status');
 
@@ -76,74 +74,50 @@ Future<void> _holdEdit(WidgetTester tester) async {
   expect(find.text('未保存'), findsOneWidget);
 }
 
+/// The page's fields are the settings themselves: no card of its own leads
+/// off to DSH Web.
+void _noWebCard() =>
+    expect(find.text('在网页版设置'), findsNothing, reason: 'the form is the page; no card leads off it');
+
 PluginConfigState _state(WidgetTester tester) =>
     ProviderScope.containerOf(tester.element(find.byType(PluginConfigPage))).read(pluginConfigProvider).value!;
 
 void main() {
-  testWidgets('held edits: 在网页版设置 asks first; 继续编辑 stays and nothing opens', (tester) async {
+  testWidgets('a plugin that ships its own web page: its fields drawn, no card to DSH Web', (tester) async {
     final api = sampleConfigApi();
     final opened = await _open(tester, api);
-    await _holdEdit(tester);
 
-    await tester.tap(find.text('在网页版设置'));
-    await settle(tester);
-    expect(find.text('放弃修改？'), findsOneWidget);
-    expect(opened, isEmpty);
-    await tester.tap(find.text('继续编辑'));
-    await settle(tester);
-    expect(opened, isEmpty);
-    expect(find.text('未保存'), findsOneWidget, reason: 'the edit is still there');
+    expect(find.text('城市'), findsOneWidget);
+    expect(find.text('单位'), findsOneWidget);
+    _noWebCard();
+    expect(opened, isEmpty, reason: 'nothing leaves the page by itself');
   });
 
-  testWidgets('held edits: 放弃 drops them, then lands on the plugin\'s card; nothing written', (tester) async {
-    final api = sampleConfigApi();
-    final opened = await _open(tester, api);
-    await _holdEdit(tester);
-
-    await tester.tap(find.text('在网页版设置'));
-    await settle(tester);
-    await tester.tap(find.byKey(const ValueKey('plugin-config-web-discard')));
-    await settle(tester);
-    expect(opened.single.pluginItem, _card);
-    expect(_state(tester).hasDraft('weather'), isFalse, reason: 'no later 保存 over what DSH Web sets');
-    expect(find.text('未保存'), findsNothing);
-    expect(api.calls.where((c) => c.$1 == 'apply'), isEmpty);
-  });
-
-  testWidgets('no held edits: straight there, no question', (tester) async {
-    final opened = await _open(tester, sampleConfigApi());
-    await tester.tap(find.text('在网页版设置'));
-    await settle(tester);
-    expect(find.text('放弃修改？'), findsNothing);
-    expect(opened.single.pluginItem, _card);
-  });
-
-  testWidgets('while a save reloads the plugin the way to DSH Web is shut, and opens again after', (tester) async {
+  testWidgets('while a save reloads the plugin the form stays: no card takes its place', (tester) async {
     final api = sampleConfigApi()..gate = Completer<void>();
     final opened = await _open(tester, api);
     await _holdEdit(tester);
     await tester.tap(find.byKey(_primary));
     await settle(tester);
     expect(tester.widget<Text>(find.byKey(_status)).data, '正在保存…');
-    expect(tester.widget<EngineFieldRow>(find.byKey(_web)).enabled, isFalse);
-    await tester.tap(find.text('在网页版设置'), warnIfMissed: false);
-    await settle(tester);
+    expect(find.text('城市'), findsOneWidget, reason: 'the form is still the page while it saves');
+    _noWebCard();
     expect(opened, isEmpty);
-    expect(find.text('放弃修改？'), findsNothing);
 
+    // The reload draws the page again from fresh data: still the form.
     final first = api.gate!;
     api.gate = Completer<void>();
     first.complete();
     await settle(tester);
-    expect(tester.widget<EngineFieldRow>(find.byKey(_web)).enabled, isFalse, reason: 'still reloading');
+    expect(find.text('城市'), findsOneWidget, reason: 'still reloading, still the form');
+    _noWebCard();
     api.gate!.complete();
     await settle(tester);
     expect(tester.widget<Text>(find.byKey(_status)).data, '已生效');
-    expect(tester.widget<EngineFieldRow>(find.byKey(_web)).enabled, isTrue);
-    await tester.tap(find.text('在网页版设置'));
-    await settle(tester);
-    expect(find.text('放弃修改？'), findsNothing, reason: 'the save took them');
-    expect(opened.single.pluginItem, _card);
+    expect(find.text('城市'), findsOneWidget, reason: 'the refreshed data does not push the form out');
+    expect(find.text('单位'), findsOneWidget);
+    _noWebCard();
+    expect(opened, isEmpty);
   });
 
   testWidgets('a field only DSH Web edits goes the page\'s way: asks, then the plugin\'s card', (tester) async {
@@ -162,7 +136,8 @@ void main() {
     expect(find.text('放弃修改？'), findsOneWidget);
     await tester.tap(find.text('继续编辑'));
     await settle(tester);
-    expect(opened, hasLength(1));
+    expect(opened, hasLength(1), reason: 'nothing else opened');
+    expect(_state(tester).hasDraft('weather'), isTrue, reason: 'the edit is still held');
   });
 
   testWidgets('elsewhere, an entry id still lands on its plugin\'s card (网页模式)', (tester) async {

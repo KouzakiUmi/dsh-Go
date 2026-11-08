@@ -21,7 +21,7 @@ So name the argument that best describes a call `query`, `url`, `path` or `name`
 
 ## Settings forms
 
-Your exported `Config` (schemastery) becomes a native settings page, reached from the plugin's details and Settings › Engine parameters › Plugins. `.volatile()` fields apply as they change; the rest apply when the person taps Save, which reloads the plugin. Secret fields (`role('secret')`) are write-only. Nested objects become groups, `.collapse()` groups start folded, and a `description` written as `{ zh, en }` follows the app's language. If your plugin has its own web settings page, register `configure({ auto: false })` in `apply`: the app puts "Set up on the web" at the top and still draws every field it can.
+Your exported `Config` (schemastery) becomes a native settings page, reached from the plugin's details and Settings › Engine parameters › Plugins. `.volatile()` fields apply as they change; the rest apply when the person taps Save, which reloads the plugin. Secret fields (`role('secret')`) are write-only. Nested objects become groups, `.collapse()` groups start folded, and a `description` written as `{ zh, en }` follows the app's language. If your plugin has its own web settings page, register `configure({ auto: false })` in `apply`: the app still draws every field it can, and no longer replaces the form with a "Set up on the web" entry; a field only the web page can edit carries "Edit on the web" on its row.
 
 Every field shows on a host whose dsh-go bridge serves `/dsh-go/v1/plugin-config`; elsewhere the app only gets volatile fields. Bind secrets to a credential with a `role('credential-ref')` field: a bare `role('secret')` shows whether it is set but can't be filled in from the app ([design](../../design/plugin-config.md)).
 

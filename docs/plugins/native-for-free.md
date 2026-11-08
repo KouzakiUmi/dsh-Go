@@ -21,7 +21,7 @@ DSH 插件里有六样东西，dsh-go App 已经用原生界面画，不需要�
 
 ## 插件配置的原生表单
 
-插件导出的 `Config`（schemastery）会画成原生设置页，入口在插件详情和 设置 › 引擎参数 › 插件。`.volatile()` 的字段改了立即生效，其余字段点「保存」后重新载入插件。密钥类字段（`role('secret')`）只写不读。对象嵌套成组，`.collapse()` 的组默认折叠；`description` 写成 `{ zh, en }` 两种语言。插件自带网页设置页时，在 `apply` 里注册 `configure({ auto: false })`，App 会在页首给出「在网页版设置」，原生能画的字段照样画。
+插件导出的 `Config`（schemastery）会画成原生设置页，入口在插件详情和 设置 › 引擎参数 › 插件。`.volatile()` 的字段改了立即生效，其余字段点「保存」后重新载入插件。密钥类字段（`role('secret')`）只写不读。对象嵌套成组，`.collapse()` 的组默认折叠；`description` 写成 `{ zh, en }` 两种语言。插件自带网页设置页时，在 `apply` 里注册 `configure({ auto: false })`：App 仍然把能画的字段画出来，但不再因此换成「在网页版设置」入口；单个字段只能在网页版改的，那一行会标「在网页版编辑此项」。
 
 主机装有提供 `/dsh-go/v1/plugin-config` 的 dsh-go bridge 时，所有字段都会出现；否则 App 只拿得到 volatile 字段。密钥要用 `role('credential-ref')` 绑定到凭据，裸的 `role('secret')` 在 App 里只显示是否已设置、不能填写（[设计](../design/plugin-config.md)）。
 

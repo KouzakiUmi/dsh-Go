@@ -20426,18 +20426,6 @@ abstract class L10n {
   /// **'没有匹配的设置'**
   String get pluginConfigNoMatch;
 
-  /// No description provided for @pluginConfigOpenWeb.
-  ///
-  /// In zh, this message translates to:
-  /// **'在网页版设置'**
-  String get pluginConfigOpenWeb;
-
-  /// No description provided for @pluginConfigOpenWebHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'插件自带的设置页'**
-  String get pluginConfigOpenWebHint;
-
   /// No description provided for @pluginConfigResetAll.
   ///
   /// In zh, this message translates to:

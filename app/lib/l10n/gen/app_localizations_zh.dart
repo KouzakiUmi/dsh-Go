@@ -11027,12 +11027,6 @@ class L10nZh extends L10n {
   String get pluginConfigNoMatch => '没有匹配的设置';
 
   @override
-  String get pluginConfigOpenWeb => '在网页版设置';
-
-  @override
-  String get pluginConfigOpenWebHint => '插件自带的设置页';
-
-  @override
   String get pluginConfigResetAll => '全部恢复默认';
 
   @override

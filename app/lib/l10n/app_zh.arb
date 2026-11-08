@@ -6542,8 +6542,6 @@
   "pluginConfigAdvanced": "高级",
   "pluginConfigSearchHint": "搜索设置",
   "pluginConfigNoMatch": "没有匹配的设置",
-  "pluginConfigOpenWeb": "在网页版设置",
-  "pluginConfigOpenWebHint": "插件自带的设置页",
   "pluginConfigResetAll": "全部恢复默认",
   "pluginConfigResetAllTitle": "全部恢复默认？",
   "pluginConfigReset": "恢复",

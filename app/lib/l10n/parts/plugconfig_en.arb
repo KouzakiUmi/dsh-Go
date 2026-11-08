@@ -4,8 +4,7 @@
   "pluginConfigAdvanced": "Advanced",
   "pluginConfigSearchHint": "Search settings",
   "pluginConfigNoMatch": "No matching settings",
-  "pluginConfigOpenWeb": "Set up on the web",
-  "pluginConfigOpenWebHint": "The plugin's own page",
+
   "pluginConfigResetAll": "Reset all to defaults",
   "pluginConfigResetAllTitle": "Reset all to defaults?",
   "pluginConfigReset": "Reset",

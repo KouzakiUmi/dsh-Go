@@ -11603,12 +11603,6 @@ class L10nEn extends L10n {
   String get pluginConfigNoMatch => 'No matching settings';
 
   @override
-  String get pluginConfigOpenWeb => 'Set up on the web';
-
-  @override
-  String get pluginConfigOpenWebHint => 'The plugin\'s own page';
-
-  @override
   String get pluginConfigResetAll => 'Reset all to defaults';
 
   @override

@@ -3,7 +3,9 @@
 // fields take effect as they change; the others wait for 保存, which reloads
 // the plugin with progress, and a failed reload can be retried, put back or
 // dropped. Long forms fold their groups and their plumbing (「高级」) and get
-// a search; a plugin that ships its own web page keeps a way there.
+// a search; a form with nothing to draw says so and prints the Host's reason
+// for its entry. No card of the page's own leads to DSH Web: only the form's
+// own rows (「在网页版编辑此项」) go there.
 
 import 'dart:async';
 
@@ -13,7 +15,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/l10n.dart';
-import '../../../plugins/seams/seams.dart' show Slots, seatInventoryProvider;
 import '../../../state/engine_settings_state.dart';
 import '../../../state/plugin_config/plugin_config_state.dart';
 import '../../../state/plugins_state.dart';
@@ -137,9 +138,9 @@ class _PageFrame {
       state.writable,
       state.local,
       state.hostLabel,
-      // 「在网页版设置」 is shut while a save or a live write is on its way.
-      state.isApplying(ns),
-      state.pending[ns]?.isNotEmpty ?? false,
+      // A save reloading the plugin, or a live write on its way, is not keyed:
+      // what the page draws from them is `canWrite` and the capsules below,
+      // and the rows and the save bar draw themselves.
       if (form != null && settings != null) ...[
         settings.canWrite(ns),
         settings.isLocked(ns),
@@ -240,21 +241,6 @@ class _PluginConfigPageState extends ConsumerState<PluginConfigPage> {
       ('failed', _) => FeatureMessage(icon: AppIcons.error, title: l10n.pluginConfigNotStarted),
       _ => FeatureMessage(icon: AppIcons.unsupported, title: l10n.pluginConfigUnsupported),
     };
-  }
-
-  /// The plugin ships a settings page of its own in DSH Web (it said so, or
-  /// the web client reported it in a config slot).
-  bool _hasWebPage(PluginConfigForm form, List<PluginBundle>? bundles) {
-    if (form.prefersOwnPage) return true;
-    final owner = pluginConfigBundleOf(bundles, ns);
-    if (owner == null) return false;
-    final occupancy = ref.watch(seatInventoryProvider)?.occupancy;
-    if (occupancy == null) return false;
-    return [
-      ...?occupancy[Slots.bundleConfig],
-      ...?occupancy[Slots.rowConfig],
-      ...?occupancy[Slots.settingsSection],
-    ].any((o) => o.package == owner.name && (o.slot != Slots.rowConfig || o.cell.endsWith('#$ns')));
   }
 
   /// A save is reloading the plugin, or a live write is on its way.
@@ -448,22 +434,10 @@ class _PluginConfigPageState extends ConsumerState<PluginConfigPage> {
     final copy = namespaceCopy[ns] ?? const <String, FieldCopy>{};
     final layout = cachedPluginConfigLayout(form, copy: copy, query: _query);
     final searching = _query.trim().isNotEmpty;
-    final web = _hasWebPage(form, bundles);
+    // 引擎为什么不肯给表单(诊断用): not-active / unsupported-schema / no-schema …
+    final entryReason = state.entries[ns]?.reason;
     // What the Host keeps as the person's own (held edits are 放弃's).
     final userSet = form.view.user?.isNotEmpty ?? false;
-
-    Widget webCard() => SettingsSection(
-      children: [
-        EngineFieldRow(
-          key: const ValueKey('plugin-config-web'),
-          title: l10n.pluginConfigOpenWeb,
-          subtitle: l10n.pluginConfigOpenWebHint,
-          opensExternally: true,
-          enabled: !_busy(state),
-          onTap: () => unawaited(_openWeb(title, bundles)),
-        ),
-      ],
-    );
 
     // A long form folds its titled groups (the untitled top stays open),
     // unless its schema folds groups of its own.
@@ -508,14 +482,17 @@ class _PluginConfigPageState extends ConsumerState<PluginConfigPage> {
               }),
             ),
           ),
-        if (web && form.prefersOwnPage && !searching) webCard(),
         if (searching && layout.sections.isEmpty)
           FeatureMessage(icon: AppIcons.search, title: l10n.pluginConfigNoMatch)
         else
           ...groups,
-        if (layout.isEmpty && !searching && !web)
+        if (layout.isEmpty && !searching)
           FeatureMessage(icon: AppIcons.configure, title: l10n.pluginConfigNone),
-        if (web && !form.prefersOwnPage && !searching) webCard(),
+        // 表单出不来时,把引擎给的原因原样写在卡上(现场诊断期用)。
+        if (layout.isEmpty && !searching && entryReason != null) ...[
+          FeatureMessage(icon: AppIcons.unsupported, title: entryReason),
+          const SizedBox(height: 8),
+        ],
         if (userSet && !searching && settings.canWrite(ns))
           SettingsSection(
             children: [

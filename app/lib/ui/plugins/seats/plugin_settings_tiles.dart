@@ -8,7 +8,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../l10n/l10n.dart';
 import '../../../plugins/seams/seams.dart';
 import '../../../state/plugins_state.dart';
 import '../../engine_settings/engine_settings_page.dart' show openSettingsPage, namespaceTitle;
@@ -39,8 +38,8 @@ Iterable<(SeatContext, SeatItem)> _items(WidgetRef ref, String slot) {
   return [for (final item in plan.visible) (plan.seat, item)];
 }
 
-/// One plugin section as a hub row: its settings form, its island page, or
-/// 「网页版」 when it only opens there.
+/// One plugin section as a hub row: the plugin's own page, which draws its
+/// settings form or its island — and offers 「在网页版打开」 when neither can.
 class PluginSettingsTile extends ConsumerWidget {
   const PluginSettingsTile({super.key, required this.seat, required this.item, this.tint = 0});
 
@@ -50,7 +49,6 @@ class PluginSettingsTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = context.l10n;
     final o = item.occupant;
     final bundle = seatBundleOf(ref.watch(installedPluginsProvider.select((s) => s.value)), o.package);
     if (item.configNamespace case final ns?) {
@@ -59,7 +57,6 @@ class PluginSettingsTile extends ConsumerWidget {
       return SchemaUnsupportedField(title: title, ns: ns);
     }
     final title = seatEntryTitle(o, inventory: ref.watch(seatInventoryProvider), bundle: bundle);
-    final bool web;
     final void Function(BuildContext context) open;
     if (item.mode == SeatMode.native) {
       // One settings namespace opens the same page the plugin's detail does.
@@ -67,7 +64,6 @@ class PluginSettingsTile extends ConsumerWidget {
       final namespaces = item.adapter is SchemaConfigAdapter && info != null
           ? SchemaConfigAdapter.namespacesFor(o, info)
           : const <String>[];
-      web = false;
       open = namespaces.length == 1
           ? (context) => unawaited(openSettingsPage(context, namespaces.single, title: title))
           : (context) => unawaited(
@@ -79,15 +75,21 @@ class PluginSettingsTile extends ConsumerWidget {
               ),
             );
     } else {
-      final entry = seatRowEntry(ref, seat, item, title: title);
-      web = entry.web;
-      open = entry.open;
+      // 不再退回「网页版」:点开由页面自己渲染(面板或表单),渲染不出来时
+      // 页面会给「在网页版打开」入口。
+      open = (context) => unawaited(
+        Navigator.of(context).push(
+          PluginSeatPage.route(
+            title: title,
+            request: SeatRequest(slot: o.slot, placement: SeatPlacement.page, package: o.package, cell: o.cell),
+          ),
+        ),
+      );
     }
     return SettingsTile(
       icon: AppIcons.plugin,
       tint: tint,
       title: title,
-      value: web ? Text(l10n.commonWeb) : null,
       onTap: () => open(context),
     );
   }

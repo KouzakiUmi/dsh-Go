@@ -1,10 +1,10 @@
 // A plugin's configuration page end to end over the in-memory Host
 // interface: live fields at once, the rest held with the save bar, the
 // reload's progress, a failed reload retried or put back, write-only keys,
-// a plugin's own web page beside its native fields, search, 全部恢复默认,
-// leaving with held edits; and where the page is reached from — the detail
-// sheet (official, market) and 设置 › 引擎参数 › 插件 — with no entry for a
-// plugin that has nothing to set.
+// a plugin's own web page drawn as its native fields (no card to DSH Web),
+// search, 全部恢复默认, leaving with held edits; and where the page is reached
+// from — the detail sheet (official, market) and 设置 › 引擎参数 › 插件 — with
+// no entry for a plugin that has nothing to set.
 
 import 'dart:async';
 
@@ -139,7 +139,7 @@ void main() {
     expect(find.text('未设置'), findsWidgets);
   });
 
-  testWidgets('a plugin with its own web page keeps the way there, and its native fields', (tester) async {
+  testWidgets('a plugin with its own web page: its native fields, and no card to DSH Web', (tester) async {
     final api = sampleConfigApi();
     final opened = <DshWebTarget>[];
     await pumpPage(
@@ -152,12 +152,8 @@ void main() {
     );
     expect(find.text('城市'), findsOneWidget);
     expect(find.text('单位'), findsOneWidget);
-    final web = find.text('在网页版设置');
-    expect(web, findsOneWidget);
-    expect(tester.getTopLeft(web).dy, lessThan(tester.getTopLeft(find.text('城市')).dy), reason: 'its page comes first');
-    await tester.tap(web);
-    await settle(tester);
-    expect(opened.single.pluginItem, ['天气', 'Weather', '@acme/dsh-weather']);
+    expect(find.text('在网页版设置'), findsNothing, reason: 'the page is the settings; no card leads off it');
+    expect(opened, isEmpty);
   });
 
   testWidgets('a Host that reads forms one at a time: the page reads its own', (tester) async {
