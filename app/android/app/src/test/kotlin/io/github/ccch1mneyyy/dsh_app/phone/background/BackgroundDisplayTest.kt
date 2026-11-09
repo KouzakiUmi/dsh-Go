@@ -1,14 +1,68 @@
 package io.github.ccch1mneyyy.dsh_app.phone.background
 
+import android.os.Bundle
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneAppIdentity
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneAction
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BackgroundDisplayTest {
+    @Test fun inputWaitingForChannelCapacityIsFencedByPauseStopAndSealAtAdmission() {
+        val display = BackgroundDisplay(
+            journal = BackgroundResourceJournal({ null }, { true }).apply { load() },
+            mayUse = { true },
+            admitUse = { action -> action(); true },
+            channelProvider = { error("the test owns the actual channel admission") },
+        )
+        val peer = object : PrivilegedChannel {
+            override val backgroundLimit = 1
+            override fun execute(request: Bundle, beforeSend: () -> Unit): Bundle = error("not used")
+            override fun alive() = true
+            override fun close() {}
+        }
+        @Suppress("UNCHECKED_CAST")
+        val io = BackgroundDisplay::class.java.getDeclaredField("resourceIo")
+            .apply { isAccessible = true }.get(display) as BackgroundDisplayIo<PrivilegedChannel>
+        io.call { io.startResource(peer, { commit -> commit() }) { true } } // The opened resource's pin.
+        val calls = PrivilegedCalls(); val sent = AtomicInteger(); val running = AtomicBoolean(true)
+        val pool = Executors.newCachedThreadPool()
+        // Another channel use (e.g. a shared-channel grant) holds the only slot while this input queues.
+        fun queued(meanwhile: () -> Unit): Future<String?> {
+            val holding = CountDownLatch(1); val release = CountDownLatch(1); val waiting = CountDownLatch(1)
+            pool.submit { calls.execute { holding.countDown(); release.await() } }
+            assertTrue(holding.await(3, TimeUnit.SECONDS))
+            val input = pool.submit<String?> {
+                display.dispatch({ running.get() }) { beforeSend ->
+                    waiting.countDown()
+                    calls.execute(beforeSend = beforeSend) { sent.incrementAndGet(); "reply" }
+                }
+            }
+            assertTrue(waiting.await(3, TimeUnit.SECONDS)); meanwhile(); release.countDown()
+            return input
+        }
+        try {
+            assertEquals("reply", queued {}.get(3, TimeUnit.SECONDS)); assertEquals(1, sent.get())
+            // Paused or stopped after the IO body's own check: nothing is sent, reported as not allowed.
+            assertNull(queued { running.set(false) }.get(3, TimeUnit.SECONDS)); running.set(true)
+            // Sealed after the IO body's own check: the resource refuses before any transport write.
+            val sealed = assertThrows(ExecutionException::class.java) { queued { display.seal() }.get(3, TimeUnit.SECONDS) }
+            assertTrue(sealed.cause is IllegalStateException)
+            assertEquals(1, sent.get()); assertEquals("next", calls.execute { "next" })
+        } finally { calls.retire(); pool.shutdownNow() }
+    }
+
     @Test fun aFailedObservationReportsItsReasonAndInvalidatesOldElementNumbers() {
         for (code in listOf("treeUnavailable", "displayTargetChanged", "displayMissing", "systemOperationDenied")) {
             val display = withLastElement()
@@ -46,9 +100,9 @@ class BackgroundDisplayTest {
 
     @Test fun unnumberedScrollRejectsAnOldOrInvalidatedSnapshotBeforeOpeningAChannel() {
         val display = withLastElement()
-        BackgroundDisplay::class.java.getDeclaredField("currentPackage").apply {
+        BackgroundDisplay::class.java.getDeclaredField("currentTarget").apply {
             isAccessible = true
-            set(display, "example.opened")
+            set(display, PhoneAppIdentity("example.opened", 10123))
         }
         fun assertStale(screenId: String) {
             val result = display.perform(PhoneAction.Scroll(screenId, null, PhoneAction.Direction.DOWN))
@@ -65,9 +119,9 @@ class BackgroundDisplayTest {
 
     @Test fun collectRejectsAnOldOrInvalidatedScreenBeforeItsFirstObservation() {
         val display = withLastElement()
-        BackgroundDisplay::class.java.getDeclaredField("currentPackage").apply {
+        BackgroundDisplay::class.java.getDeclaredField("currentTarget").apply {
             isAccessible = true
-            set(display, "example.opened")
+            set(display, PhoneAppIdentity("example.opened", 10123))
         }
         fun assertStale(id: String) {
             val error = assertThrows(IllegalStateException::class.java) {
@@ -112,9 +166,9 @@ class BackgroundDisplayTest {
 
     private fun withLists(): BackgroundDisplay {
         val display = withLastElement()
-        BackgroundDisplay::class.java.getDeclaredField("currentPackage").apply {
+        BackgroundDisplay::class.java.getDeclaredField("currentTarget").apply {
             isAccessible = true
-            set(display, "example.opened")
+            set(display, PhoneAppIdentity("example.opened", 10123))
         }
         val elements = listOf(
             Element(1, "文本", "header", Region.MIDDLE),
@@ -136,9 +190,12 @@ class BackgroundDisplayTest {
 
     private fun withLastElement(): BackgroundDisplay {
         val display = BackgroundDisplay(
+            journal = BackgroundResourceJournal({ null }, { true }).apply { load() },
+            mayUse = { true },
+            admitUse = { action -> action(); true },
             channelProvider = { error("response validation must not start a connection") },
-            releaseChannelProvider = { error("response validation must not release the display") },
         )
+        BackgroundDisplay::class.java.getDeclaredField("targetReady").apply { isAccessible = true; setBoolean(display, true) }
         BackgroundDisplay::class.java.getDeclaredField("lastScreenId").apply {
             isAccessible = true
             set(display, "b7")
@@ -152,13 +209,16 @@ class BackgroundDisplayTest {
 
     @Test fun onlyBackIsSentToTheBackgroundScreen() {
         val display = BackgroundDisplay(
+            journal = BackgroundResourceJournal({ null }, { true }).apply { load() },
+            mayUse = { true },
+            admitUse = { action -> action(); true },
             channelProvider = { error("a refused key must not reach the privileged channel") },
-            releaseChannelProvider = { error("a refused key must not release the background screen") },
         )
+        BackgroundDisplay::class.java.getDeclaredField("targetReady").apply { isAccessible = true; setBoolean(display, true) }
         // An app is open on the background screen (set directly: opening one needs the channel).
-        BackgroundDisplay::class.java.getDeclaredField("currentPackage").apply {
+        BackgroundDisplay::class.java.getDeclaredField("currentTarget").apply {
             isAccessible = true
-            set(display, "example.opened")
+            set(display, PhoneAppIdentity("example.opened", 10123))
         }
 
         for (key in PhoneAction.GlobalKey.entries - PhoneAction.GlobalKey.BACK) {

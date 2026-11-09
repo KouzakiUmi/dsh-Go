@@ -175,7 +175,50 @@ void _phone(StringBuffer b, DiagnosticsSnapshot s) {
       ..writeln('- 手机操控开关：${phone.enabled} · 桥接监听：${phone.bridgeListening}')
       ..writeln('- 无障碍开关：${phone.a11y.enabled} · 服务已连接：${phone.a11y.serviceConnected}');
   }
+  _backgroundInputProbe(b, s.native.device['backgroundInputProbe']);
   b.writeln();
+}
+
+/// Last accepted native probe facts, not a fresh test or current connectivity.
+/// Keep this allowlist aligned with native InputProbeDiagnostics; never print a raw map.
+void _backgroundInputProbe(StringBuffer b, Object? raw) {
+  const label = '- 最近接受的后台输入探针事实（不是实时自检）';
+  if (raw is! Map || raw['v'] is! int || raw['v'] != 1 || raw['observed'] is! bool) {
+    b.writeln('$label：不可用或版本未知');
+    return;
+  }
+  final result = raw['result'];
+  final outcome = raw['observed'] == false
+      ? '未运行或无保留观察'
+      : result == 'success'
+      ? '通过'
+      : result == 'failure'
+      ? '失败'
+      : '结果未知';
+  b.writeln('$label：$outcome');
+  final connectionFailure = raw['connectionFailure'];
+  if (connectionFailure is bool) {
+    b.writeln('- 保留连接失败事实：$connectionFailure（不表示当前连接状态）');
+  }
+  if (raw['observed'] != true || result != 'failure') return;
+  const stages = {
+    'precondition', 'ui_dispatch', 'presentation_create', 'presentation_configure',
+    'presentation_show', 'view_layout_wait', 'frame_commit_wait', 'target_validate',
+    'input_send', 'receipt_wait', 'cleanup',
+  };
+  const types = {
+    'none', 'SecurityException', 'IllegalStateException', 'IllegalArgumentException',
+    'InvalidDisplayException', 'BadTokenException', 'TimeoutException', 'InterruptedException', 'OtherException',
+  };
+  final stage = raw['stage'];
+  final type = raw['exceptionType'];
+  final elapsed = raw['elapsedMs'];
+  final details = <String>[
+    if (stage is String && stages.contains(stage)) 'stage=$stage',
+    if (type is String && types.contains(type)) 'type=$type',
+    if (elapsed is int && elapsed >= 0 && elapsed <= 60000) 'elapsedMs=$elapsed',
+  ];
+  if (details.isNotEmpty) b.writeln('- 后台输入探针失败细节：${details.join(' · ')}');
 }
 
 void _performance(StringBuffer b, DiagnosticsSnapshot s) {

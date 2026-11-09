@@ -306,6 +306,7 @@
   "stateSubscriptionDisconnected": "Engine disconnected. Try again later.",
   "stateTerminalLimit": "Terminal limit reached",
   "stateTerminalStartFailed": "Couldn’t start terminal",
+  "stateTerminalDisabledOnHost": "This computer turned off the remote terminal. Turn on “Terminal” in Remote settings on the computer, then try again.",
   "stateTileDuotone": "Duotone",
   "stateTileGeometric": "Geometric",
   "stateTileGlassy": "Glass",

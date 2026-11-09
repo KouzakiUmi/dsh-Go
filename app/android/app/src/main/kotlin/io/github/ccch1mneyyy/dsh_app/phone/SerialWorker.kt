@@ -56,10 +56,15 @@ class SerialWorker internal constructor(
         object Interrupted : Outcome<Nothing>
     }
 
+    private enum class AdmissionState { QUEUED, RUNNING, CANCELLED }
+
     private val generation = AtomicLong()
     @Volatile private var executor: ExecutorService = newExecutor()
     private val current = java.util.concurrent.atomic.AtomicReference<Thread?>(null)
     private val retirementLock = Any()
+    private var currentOwner: Any? = null
+    private val ownerBodies = java.util.IdentityHashMap<Any, Int>()
+    private val drainWaiters = java.util.IdentityHashMap<Any, MutableList<() -> Unit>>()
     private var retirementEpoch = 0L
 
     private fun newExecutor(): ExecutorService {
@@ -68,29 +73,45 @@ class SerialWorker internal constructor(
     }
 
     /** Runs [job] on the worker; blocks the caller until it finishes or overruns. */
-    fun <T> run(budgetMs: Long, maxTotalMs: Long, job: (Scope) -> T): Outcome<T> {
+    fun <T> run(budgetMs: Long, maxTotalMs: Long, owner: Any? = null, job: (Scope) -> T): Outcome<T> {
         val admittedEpoch = synchronized(retirementLock) { retirementEpoch }
         val scope = Scope(clock)
         val submitted = clock()
-        val startedAt = AtomicLong(0)
+        var admission = AdmissionState.QUEUED // Protected by retirementLock, including the body claim.
+        var startedAt = 0L // Zero is a valid clock value; admission is the execution state.
         val finished = CountDownLatch(1)
         val exec = executor
         val future: Future<T> = try {
             exec.submit(Callable {
-                startedAt.set(clock())
+                val startTime = clock() // May block in a test/clock provider; never inside the admission lock.
                 val self = Thread.currentThread()
+                var registered = false
                 try {
                     synchronized(retirementLock) {
-                        if (admittedEpoch != retirementEpoch) throw InterruptedException()
+                        if (admission != AdmissionState.QUEUED || admittedEpoch != retirementEpoch || self.isInterrupted) {
+                            admission = AdmissionState.CANCELLED
+                            throw InterruptedException()
+                        }
+                        admission = AdmissionState.RUNNING
+                        startedAt = startTime
                         current.set(self)
+                        currentOwner = owner
+                        if (owner != null) { ownerBodies[owner] = (ownerBodies[owner] ?: 0) + 1; registered = true }
                     }
                     job(scope)
                 } finally {
-                    synchronized(retirementLock) {
-                        current.compareAndSet(self, null)
+                    val drained = synchronized(retirementLock) {
+                        if (current.compareAndSet(self, null)) currentOwner = null
                         Thread.interrupted() // don't leak an interrupt into the next job
                         finished.countDown()
+                        if (registered && owner != null) {
+                            val remaining = checkNotNull(ownerBodies[owner]) - 1
+                            if (remaining == 0) { ownerBodies.remove(owner); drainWaiters.remove(owner)?.toList().orEmpty() }
+                            else { ownerBodies[owner] = remaining; emptyList() }
+                        } else emptyList()
                     }
+                    // Lifecycle observers may release device resources; never call them under the worker lock.
+                    drained.forEach { runCatching(it) }
                 }
             })
         } catch (e: java.util.concurrent.RejectedExecutionException) {
@@ -98,18 +119,29 @@ class SerialWorker internal constructor(
         }
         while (true) {
             try {
-                return Outcome.Done(future.get(POLL_MS, TimeUnit.MILLISECONDS))
+                val value = future.get(POLL_MS, TimeUnit.MILLISECONDS)
+                // Device code may consume interruption. Retirement and delivery share this
+                // commit point; a drained old body must not publish a successful old value.
+                return synchronized(retirementLock) {
+                    if (admittedEpoch != retirementEpoch) Outcome.Interrupted else Outcome.Done(value)
+                }
             } catch (_: TimeoutException) {
                 val t = clock()
-                val started = startedAt.get()
-                if (started == 0L) {
+                val state = synchronized(retirementLock) { admission to startedAt }
+                if (state.first != AdmissionState.RUNNING) {
                     if (t - submitted > maxTotalMs) {
-                        future.cancel(false)
-                        return Outcome.TimedOut(queued = true)
+                        val cancelledBeforeStart = synchronized(retirementLock) {
+                            if (admission != AdmissionState.QUEUED) false
+                            else { admission = AdmissionState.CANCELLED; true }
+                        }
+                        if (cancelledBeforeStart) {
+                            future.cancel(false)
+                            return Outcome.TimedOut(queued = true)
+                        }
                     }
                     continue
                 }
-                if (scope.charged(started, t) > budgetMs || t - submitted > maxTotalMs) {
+                if (scope.charged(state.second, t) > budgetMs || t - submitted > maxTotalMs) {
                     future.cancel(true)
                     abandonIfStuck(exec, finished)
                     return if (Thread.currentThread().isInterrupted) Outcome.Interrupted else Outcome.TimedOut(queued = false)
@@ -120,7 +152,7 @@ class SerialWorker internal constructor(
             } catch (_: CancellationException) {
                 // A retired executor removes queued Futures without running their Callables.
                 // This is an unexecuted call, not a user stop of a running operation.
-                return if (startedAt.get() == 0L) Outcome.TimedOut(queued = true) else Outcome.Interrupted
+                return if (synchronized(retirementLock) { admission != AdmissionState.RUNNING }) Outcome.TimedOut(queued = true) else Outcome.Interrupted
             } catch (e: InterruptedException) {
                 future.cancel(true)
                 Thread.currentThread().interrupt()
@@ -136,8 +168,17 @@ class SerialWorker internal constructor(
     }
 
     /** Interrupts the job that is running now, if any (the stop button). Gates treat it as STOP. */
-    fun interruptCurrent() {
-        current.get()?.interrupt()
+    fun interruptCurrent(owner: Any? = null) = synchronized(retirementLock) {
+        if (owner == null || currentOwner === owner) current.get()?.interrupt()
+    }
+
+    /** A cancelled Future may be done while its body still owns device work. */
+    fun afterDrained(owner: Any, action: () -> Unit) {
+        val ready = synchronized(retirementLock) {
+            if ((ownerBodies[owner] ?: 0) == 0) true
+            else { drainWaiters.getOrPut(owner) { mutableListOf() }.add(action); false }
+        }
+        if (ready) action()
     }
 
     fun shutdown() {
@@ -166,6 +207,7 @@ class SerialWorker internal constructor(
             // thread, so only this completion signal can authorize retiring the executor.
             if (finished.count != 0L && executor === exec) {
                 current.set(null)
+                currentOwner = null
                 executor = newExecutor()
                 shutdown(exec)
             }

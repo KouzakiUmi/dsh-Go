@@ -258,6 +258,9 @@ class RemoteTunnelCarrier extends DshCarrier implements WorkspaceUploadCarrier {
 
   /// Capabilities of the live (or last) Host connection.
   List<String> get capabilities => _lastCapabilities;
+
+  @override
+  Set<String>? get peerCapabilities => _lastCapabilities.isEmpty ? null : _lastCapabilities.toSet();
   List<String> _lastCapabilities = const [];
 
   RemoteFailure? get lastFailure => _lastFailure;

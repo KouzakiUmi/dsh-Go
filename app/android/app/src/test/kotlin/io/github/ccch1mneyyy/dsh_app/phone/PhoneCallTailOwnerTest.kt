@@ -48,7 +48,7 @@ class PhoneCallTailOwnerTest {
             override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?) = error("unexpected collect")
             override fun target(screenId: String, elementId: Int) = error("unexpected target")
             override fun perform(action: PhoneAction) = error("unexpected action")
-            override fun open(packageName: String) = error("unexpected background open")
+            override fun open(target: PhoneAppIdentity) = error("unexpected background open")
         }
         val core = PhoneCore(object : PhoneEnv {
             override fun enabled() = true
@@ -70,12 +70,12 @@ class PhoneCallTailOwnerTest {
             override fun notifyFix(kind: String) {}
             override fun sleep(ms: Long) {}
             override fun system() = object : SystemApi {
-                override fun apps() = listOf(AppEntry("Blocked", "blocked.app"))
+                override fun apps() = listOf(AppEntry("Blocked", PhoneAppIdentity("blocked.app", 10123)))
                 override fun isInstalled(pkg: String) = true
-                override fun launch(app: AppEntry, dispatch: PhoneTasks.SystemDispatch) = error("the deny list must prevent launch")
-                override fun urlTarget(url: String) = error("unexpected URL")
-                override fun openUrl(url: String, target: UrlTarget, dispatch: PhoneTasks.SystemDispatch) = error("unexpected URL open")
-                override fun intent(spec: IntentSpec, shareTo: AppEntry?, dispatch: PhoneTasks.SystemDispatch) = error("unexpected intent")
+                override fun prepareLaunch(app: AppEntry): Either<String, SystemLaunch> = Either.Right(TestSystemLaunch(SystemTarget.Known(app)))
+                override fun launch(plan: SystemLaunch, dispatch: PhoneTasks.SystemDispatch) = error("the deny list must prevent launch")
+                override fun prepareUrl(url: String): Either<String, SystemLaunch> = error("unexpected URL")
+                override fun prepareIntent(spec: IntentSpec, selectedApp: AppEntry?): Either<String, SystemLaunch> = error("unexpected intent")
                 override fun notify(title: String, text: String) = error("unexpected notification")
                 override fun clipboardSet(text: String) = error("unexpected clipboard")
                 override fun clipboardGet() = error("unexpected clipboard")

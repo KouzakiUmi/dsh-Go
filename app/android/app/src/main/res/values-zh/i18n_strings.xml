@@ -212,8 +212,8 @@
     <string name="phone_notice_settings">打开设置</string>
     <string name="phone_share_chooser">分享到</string>
     <string name="phone_open_channel">DSH 想打开的界面</string>
-    <string name="phone_open_notice">DSH 想%1$s</string>
-    <string name="phone_tap_open">点这里打开</string>
+    <string name="phone_open_notice">DSH · %1$s</string>
+    <string name="phone_tap_open">返回 DSH 核对任务；不会重复刚才的操作。</string>
     <string name="phone_reminder_channel">DSH 的提醒</string>
     <string name="phone_log_apps">列出应用</string>
     <string name="phone_log_apps_filtered">列出应用（筛选）</string>
@@ -315,4 +315,6 @@
     <string name="background_selection_cancelled">通道选择已取消</string>
     <string name="background_keep_phone_disabled">请先开启手机操控，再保持此通道。</string>
     <string name="background_keep_save_failed">未能保存通道保持设置，请在重启 App 前确认。</string>
+    <string name="background_viewport_invalid">未知的后台视口预设</string>
+    <string name="background_viewport_save_failed">无法保存后台视口设置。</string>
 </resources>

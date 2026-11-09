@@ -12,8 +12,11 @@ import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
+import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import io.github.ccch1mneyyy.dsh_app.MainActivity
 import io.github.ccch1mneyyy.dsh_app.R
@@ -72,9 +75,10 @@ class DshService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_PHONE_STOP -> {
-                // 「停止操作」 on the notification: stop the phone task, keep the engine.
+                // 「停止操作」 on the notification: stop the task it was shown for, keep the engine.
+                val taskId = intent.data?.takeIf { it.scheme == PHONE_TASK_SCHEME }?.schemeSpecificPart?.toLongOrNull()
                 // l10n:keep agent stop reason
-                PhoneControl.get(this).stopTask("用户在通知里停止")
+                if (taskId != null) PhoneControl.get(this).stopShownTask("用户在通知里停止", taskId)
                 return START_NOT_STICKY
             }
             ACTION_STOP -> {
@@ -182,7 +186,13 @@ class DshService : Service() {
         const val ACTION_START = "io.github.ccch1mneyyy.dsh_app.START"
         const val ACTION_STOP = "io.github.ccch1mneyyy.dsh_app.STOP"
         const val ACTION_PHONE_STOP = "io.github.ccch1mneyyy.dsh_app.PHONE_STOP"
+        private const val PHONE_TASK_SCHEME = "dsh-phone-task"
         private const val EXTRA_STOP_GENERATION = "stopGeneration"
+
+        /** 停止操作 for exactly [taskId]. The id is the intent's data, so every task gets its own
+         * PendingIntent: a newer task's button never rewrites the one still on screen. */
+        fun phoneStopIntent(context: Context, taskId: Long): Intent = Intent(context, DshService::class.java)
+            .setAction(ACTION_PHONE_STOP).setData(Uri.fromParts(PHONE_TASK_SCHEME, taskId.toString(), null))
 
         /** With [ACTION_INSTALL_DONE]: the unpack finished (true) or stopped. */
         const val EXTRA_INSTALL_OK = "ok"
@@ -253,6 +263,7 @@ class DshService : Service() {
                 .setOnlyAlertOnce(true)
                 .build()
 
+        private val notificationMain = Handler(Looper.getMainLooper())
         @Volatile private var running = false
 
         /**
@@ -274,6 +285,12 @@ class DshService : Service() {
 
         fun updateNotification(context: Context) {
             if (!running) return
+            // Build and publish with Service start/stop on the main looper, without an old snapshot.
+            if (Looper.myLooper() != Looper.getMainLooper()) {
+                val app = context.applicationContext
+                notificationMain.post { updateNotification(app) }
+                return
+            }
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.notify(NOTIFICATION_ID, buildNotification(context, RuntimeController.get(context)))
         }
@@ -314,11 +331,13 @@ class DshService : Service() {
             } else {
                 @Suppress("DEPRECATION") Notification.Builder(context)
             }
-            // While DSH operates the phone: say what it does and offer 停止操作.
-            val phoneLine = PhoneControl.peek()?.foregroundLine()
-            if (phoneLine != null) {
+            // While DSH operates the phone: say what it does and offer 停止操作 for that task.
+            val phone = PhoneControl.peek()
+            val phoneTask = phone?.liveTask()
+            val phoneLine = phoneTask?.let { phone?.foregroundLine(it) }
+            if (phoneTask != null) {
                 val stopPhone = PendingIntent.getService(
-                    context, 2, Intent(context, DshService::class.java).setAction(ACTION_PHONE_STOP),
+                    context, 2, phoneStopIntent(context, phoneTask.id),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                 )
                 builder.addAction(Notification.Action.Builder(null, AppStrings.get(context, R.string.service_stop_phone), stopPhone).build())

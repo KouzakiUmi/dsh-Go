@@ -36,7 +36,7 @@ class PhoneStaleRefreshTest {
                 return next
             }
             override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?) = error("unused")
-            override fun open(packageName: String) = error("unused")
+            override fun open(target: PhoneAppIdentity) = error("unused")
         }
         val core = PhoneCore(object : PhoneEnv {
             override fun enabled() = true
