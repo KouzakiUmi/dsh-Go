@@ -36,12 +36,15 @@ const _magpieObsoleteGroupRoutes = {
 };
 
 /// A provider profile one of magpie's imports manages: its route carries
-/// the magpie prefix (or a supplier route's display name), and it still
-/// points at the local gateway with the interop key reference — so a
-/// user's own route that happens to start with "magpie" is left alone.
+/// the magpie prefix (or a supplier route's display name, `Magpie · …` on
+/// imports before the `M · …` switch), and it still points at the local
+/// gateway with the interop key reference — so a user's own route that
+/// happens to start with "magpie" is left alone.
 bool _magpieManaged(ProviderProfile profile) =>
     (profile.route.startsWith('magpie-provider-') ||
-        (profile.route.startsWith('magpie-') && (profile.displayName ?? '').startsWith('Magpie · ')) ||
+        (profile.route.startsWith('magpie-') &&
+            ((profile.displayName ?? '').startsWith('Magpie · ') ||
+                (profile.displayName ?? '').startsWith('M · '))) ||
         _magpieObsoleteGroupRoutes.contains(profile.route) ||
         MagpieRouteKind.values.any((kind) => kind.route == profile.route)) &&
     profile.apiKeyEnv == magpieGatewayKeyRef &&

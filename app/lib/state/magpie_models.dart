@@ -185,10 +185,10 @@ ProviderModelSpec magpieModelSpec(
   final input = (model.inputModalities ?? metadataInput ?? previous?.input)
       ?.where((kind) => kind == 'text' || kind == 'image')
       .toList(growable: false);
-  final owner = metadata['owned_by'] as String?;
   final rawName = (metadata['display_name'] as String?) ?? model.name ?? previous?.name ?? model.id;
-  final displayOwner = isAutoRoutingModelId(model.id) ? 'Auto Routing' : owner;
-  final displayName = displayOwner != null && displayOwner.isNotEmpty ? '$displayOwner · $rawName' : rawName;
+  // 供应商名不再写进模型名：provider 分组后路由名已经带着它（M · 显示名），
+  // 再叠一遍只会重复；自动路由模型保留「Auto Routing」以示它不受单一供应商约束。
+  final displayName = isAutoRoutingModelId(model.id) ? 'Auto Routing · $rawName' : rawName;
   // An absent or non-positive window writes nothing (`omitempty` upstream).
   final contextWindow = model.contextWindow ?? previous?.contextWindow;
   final spec = ProviderModelSpec(
@@ -313,6 +313,23 @@ List<MagpieProviderRoute> groupMagpieProviderRoutes(
     MagpieRouteKind.responses => ' · Responses',
     MagpieRouteKind.anthropic => ' · Anthropic',
   };
+  // owned_by 是内部 slug（volcengine、github-copilot）；路由名要的是管理页
+  // 的显示名（Volcengine Ark、GitHub Copilot）。/v1/models 不直接给显示名，
+  // 但 magpie_label 是「display_name · 供应商显示名」，取末段；自动路由组的
+  // 标签尾是 routing group，不算显示名。
+  final providerNames = <String, String>{};
+  for (final entry in metadata.entries) {
+    final owner = entry.value['owned_by'];
+    final label = entry.value['magpie_label'];
+    final display = entry.value['display_name'];
+    if (owner is! String || owner.isEmpty || label is! String || display is! String) continue;
+    const suffix = ' · ';
+    if (!label.startsWith(display) || label.length <= display.length + suffix.length) continue;
+    final tail = label.substring(display.length + suffix.length);
+    if (tail.isEmpty || tail == 'routing group') continue;
+    providerNames.putIfAbsent(owner, () => tail);
+  }
+  String ownerDisplay(String owner) => providerNames[owner] ?? owner;
   String ownerHash(String owner) {
     var hash = 0x811c9dc5;
     for (final unit in owner.codeUnits) {
@@ -335,7 +352,7 @@ List<MagpieProviderRoute> groupMagpieProviderRoutes(
             owner == 'auto'
                 ? autoRoute(kind)
                 : 'magpie-provider-${slug(owner)}-${ownerHash(owner)}-${kind.name}',
-            '${owner == 'auto' ? 'Auto Routing' : 'Magpie · $owner'}${label(kind)}',
+            '${owner == 'auto' ? 'Auto Routing' : 'M · ${ownerDisplay(owner)}'}${label(kind)}',
             [...buckets['$owner\u0000${kind.name}']!]..sort((a, b) => a.id.compareTo(b.id)),
           ),
   ];

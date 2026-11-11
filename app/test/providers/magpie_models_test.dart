@@ -209,23 +209,36 @@ void main() {
     ];
     final metadata = {
       'auto/glm-5.3-flash': {'owned_by': 'volcengine', 'native_endpoints': ['/v1/responses']},
-      'volcengine/glm-5.3-flash': {'owned_by': 'volcengine', 'native_endpoints': ['/v1/responses']},
-      'copilot/claude-opus-5-5': {'owned_by': 'copilot', 'native_endpoints': ['/v1/messages']},
+      'volcengine/glm-5.3-flash': {
+        'owned_by': 'volcengine',
+        'native_endpoints': ['/v1/responses'],
+        'display_name': 'GLM-5.3-Flash',
+        'magpie_label': 'GLM-5.3-Flash · Volcengine Ark',
+      },
+      'copilot/claude-opus-5-5': {
+        'owned_by': 'copilot',
+        'native_endpoints': ['/v1/messages'],
+        'display_name': 'Claude Opus 5.5',
+        'magpie_label': 'Claude Opus 5.5 · GitHub Copilot',
+      },
     };
     final grouped = groupMagpieModels(models, metadata);
     final routes = groupMagpieProviderRoutes(grouped, metadata);
     expect(routes.map((r) => r.route).toSet().length, 3);
     expect(routes.map((r) => r.owner), ['auto', 'copilot', 'volcengine']);
     expect(routes.map((r) => r.kind), [MagpieRouteKind.responses, MagpieRouteKind.anthropic, MagpieRouteKind.responses]);
+    // 路由名带 M · 供应商显示名，模型名本身不再重复一遍供应商。
     expect(routes.map((r) => r.displayName), [
       'Auto Routing · Responses',
-      'Magpie · copilot · Anthropic',
-      'Magpie · volcengine · Responses',
+      'M · GitHub Copilot · Anthropic',
+      'M · Volcengine Ark · Responses',
     ]);
     expect(routes[0].models.single.id, 'auto/glm-5.3-flash');
     expect(routes[0].models.single.name, startsWith('Auto Routing · '));
     expect(routes[1].models.single.id, 'copilot/claude-opus-5-5');
+    expect(routes[1].models.single.name, 'Claude Opus 5.5');
     expect(routes[2].models.single.id, 'volcengine/glm-5.3-flash');
+    expect(routes[2].models.single.name, 'GLM-5.3-Flash');
     for (final route in routes) {
       expect(providerRoutePattern.hasMatch(route.route), isTrue);
     }
