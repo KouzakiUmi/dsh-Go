@@ -123,6 +123,7 @@ class FakeProviderBackend implements ProviderBackend {
     String? baseUrl,
     String? apiKeyEnv,
     List<ProviderModelSpec>? models,
+    Map<String, String>? headers,
     int? streamIdleTimeoutMs,
     int? expectedRevision,
   }) async {
@@ -134,6 +135,7 @@ class FakeProviderBackend implements ProviderBackend {
         'api': ?api?.wire,
         'baseURL': ?baseUrl,
         'apiKeyEnv': ?apiKeyEnv,
+        'headers': ?headers,
         if (models != null) 'models': [for (final m in models) m.toJson()],
         'streamIdleTimeoutMs': ?streamIdleTimeoutMs,
         'expectedRevision': ?expectedRevision,
@@ -148,7 +150,7 @@ class FakeProviderBackend implements ProviderBackend {
       baseUrl: baseUrl ?? old.baseUrl,
       apiKeyEnv: apiKeyEnv ?? old.apiKeyEnv,
       models: models ?? old.models,
-      headers: old.headers,
+      headers: headers ?? old.headers,
       modelOverrides: old.modelOverrides,
       defaultContextWindow: old.defaultContextWindow,
       defaultMaxTokens: old.defaultMaxTokens,
@@ -242,8 +244,17 @@ class FakeProviderBackend implements ProviderBackend {
   }
 
   @override
-  Future<List<DiscoveredModel>> discover({String? provider, String? baseUrl, ProviderApi? api, String? apiKey}) async {
-    calls.add(('discover', {'provider': ?provider, 'baseURL': ?baseUrl, 'api': ?api?.wire, 'apiKey': ?apiKey}));
+  Future<List<DiscoveredModel>> discover({
+    String? provider,
+    String? baseUrl,
+    ProviderApi? api,
+    String? apiKey,
+    Map<String, String>? headers,
+  }) async {
+    calls.add((
+      'discover',
+      {'provider': ?provider, 'baseURL': ?baseUrl, 'api': ?api?.wire, 'apiKey': ?apiKey, 'headers': ?headers},
+    ));
     if (discoverFor case final pick?) {
       final answer = pick(baseUrl);
       if (answer is List<DiscoveredModel>) return answer;

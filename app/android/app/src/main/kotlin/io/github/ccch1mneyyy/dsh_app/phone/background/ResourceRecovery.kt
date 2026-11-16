@@ -60,13 +60,21 @@ internal object ResourceRecovery {
     fun verify(current: Birth, old: Check, pidAbsent: (Int) -> Boolean,
                displays: () -> List<DisplayFact>, tasksEmpty: (Int) -> Boolean): String {
         if (current.boot != old.birth.boot) return "previousBoot"
-        if (!current.nsAvailable || !old.birth.nsAvailable || current.nsIno <= 0 || old.birth.nsIno <= 0 ||
-            current.nsDev != old.birth.nsDev || current.nsIno != old.birth.nsIno) throw Failure("recoveryUnknown")
+        // Some OEMs deny /proc/self/ns to the privileged service; that must not block recovery of a
+        // record from this same boot forever. The recorded absence facts below stay mandatory, so a
+        // live old process or any surviving display/task still refuses recovery.
+        if (old.birth.nsAvailable) {
+            if (!current.nsAvailable || current.nsIno <= 0 || old.birth.nsIno <= 0 ||
+                current.nsDev != old.birth.nsDev || current.nsIno != old.birth.nsIno) throw Failure("recoveryUnknown")
+        }
         if (!pidAbsent(old.birth.pid)) throw Failure("recoveryUnknown")
-        val id = old.displayId ?: throw Failure("recoveryUnknown")
         if (current.uid != 0 && current.uid != 1000 && current.uid != old.birth.uid) throw Failure("recoveryUnknown")
         val all = displays()
         if (all.any { it.name == tag(old.owner) }) throw Failure("recoveryPresent")
+        // A record can fail before the actual display id is persisted (e.g. the write failed and
+        // the process died). The old peer is gone and no display carries this owner's tag, so the
+        // allocation never became visible; there is no id or task scope to wait for.
+        val id = old.displayId ?: return "deadPeerEmpty"
         if (all.any { it.id == id }) throw Failure("recoveryConflict")
         if (!tasksEmpty(id)) throw Failure("recoveryPresent")
         return "deadPeerEmpty"

@@ -7,8 +7,6 @@ import '../state/models_state.dart';
 import '../state/providers_state.dart';
 import '../state/read_list_epoch.dart';
 import '../state/settings_state.dart';
-import '../ui/common/app_dialog.dart';
-import '../ui/theme/shapes.dart';
 import 'app_links.dart';
 
 const magpieProviderLinkHost = 'providers';
@@ -294,7 +292,7 @@ VoidCallback registerMagpieLinks(LinkRouter router, WidgetRef ref) => router.reg
     if (request == null) return true;
     if (!context.mounted) return true;
     final messenger = ScaffoldMessenger.maybeOf(context);
-    final outcome = await showAppDialog<MagpieImportOutcome>(
+    final outcome = await showDialog<MagpieImportOutcome>(
       context: context,
       barrierDismissible: false,
       builder: (_) => _MagpieImportDialog(request: request),
@@ -430,7 +428,7 @@ class _MagpieImportDialogState extends ConsumerState<_MagpieImportDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ClipRRect(
-                  borderRadius: AppShape.radiusXs,
+                  borderRadius: const BorderRadius.all(Radius.circular(6)),
                   child: LinearProgressIndicator(value: value, minHeight: 4),
                 ),
                 const SizedBox(height: 12),
