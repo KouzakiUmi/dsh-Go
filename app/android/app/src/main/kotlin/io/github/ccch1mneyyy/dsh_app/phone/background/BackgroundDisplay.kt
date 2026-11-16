@@ -25,13 +25,13 @@ import io.github.ccch1mneyyy.dsh_app.phone.VisualTarget
 
 /**
  * BACKGROUND [PhoneDriver] (screen ids `b<n>`): reads and drives the trusted virtual display
- * through its original privileged channel. [BackgroundControl] retains the task's resource
- * until strict cleanup succeeds; UI selection never routes this driver's operations.
+ * through its original privileged channel. [BackgroundControl] releases it when the task ends,
+ * and disconnects that channel if the release is not confirmed; UI selection never routes this
+ * driver's operations.
  * All calls are serialised by the bridge; this class never retries a dispatched action.
  */
 class BackgroundDisplay internal constructor(
     private val channelProvider: () -> PrivilegedChannel?,
-    journal: BackgroundResourceJournal,
     private val mayUse: () -> Boolean,
     private val admitUse: ((() -> Unit) -> Boolean),
     private val viewport: BackgroundPolicy.Viewport = BackgroundPolicy.Viewport.PORTRAIT,
@@ -41,27 +41,22 @@ class BackgroundDisplay internal constructor(
 ) : PhoneDriver {
 
     private val resourceIo = BackgroundDisplayIo<PrivilegedChannel>()
-    private val resourceScope = BackgroundResourceScope(resourceIo, journal, "task", viewport.preset)
     internal val ownerToken: String get() = resourceIo.owner
-    internal val physicalComplete: Boolean get() = resourceScope.physicalComplete
-    internal val originalPeerLost: Boolean get() = resourceIo.peer()?.alive() == false
-    /** Never a RELEASE on another peer: only that peer's exact absence receipt completes this drained scope. */
-    internal fun recoverLostPeer(verify: (BackgroundResourceJournal.Record) -> Boolean): Boolean =
-        try { resourceScope.recover({ !it.alive() }, verify) } catch (_: Exception) { false }
     internal fun seal() { resourceIo.seal(); coordinateImage.invalidateScope() }
-    internal fun previewAvailable(peer: PrivilegedChannel): Boolean =
-        resourceScope.allocationReady && resourceIo.previewAvailable(peer)
+    internal fun previewAvailable(peer: PrivilegedChannel): Boolean = resourceIo.previewAvailable(peer)
     internal fun previewClosed(): Boolean = resourceIo.previewClosed()
     internal fun tryPreview(request: Bundle): Bundle? = resourceIo.tryPreview { peer ->
-        if (!resourceScope.allocationReady) return@tryPreview null
         if (request.get(Proto.OP) == Proto.OP_PROBE) peer.tryExecute(request)
         else peer.tryExecute(OwnerScopeProtocol.request(request))?.let { OwnerScopeProtocol.response(ownerToken, it) }
     }
 
     override val screen: PhoneScreen = PhoneScreen.BACKGROUND
 
+    // The app the model last saw on top (what it opened, or what a later read showed). Actions are
+    // addressed to it; every read follows the screen as it actually is.
     @Volatile private var currentTarget: PhoneAppIdentity? = null
-    @Volatile private var targetReady = false
+    // The app the last open asked for, only to tell the model when the screen shows another one.
+    @Volatile private var openedTarget: PhoneAppIdentity? = null
     private var coordinateSupported = false
     private var afterVisualSupported = false
     private var navigationSupported = false
@@ -94,46 +89,11 @@ class BackgroundDisplay internal constructor(
             if (!allowed()) throw NotAdmitted()
             clearSnapshot()
             resourceIo.commitObservation {
-                targetReady = false
                 currentTarget = target
+                openedTarget = target
             }
             check(mayUse()) { Reasons.of("deviceUnavailable") }
             val active = channel()
-            if (resourceIo.peer() == null) {
-                val probe = active.execute(Bundle().apply { putString(Proto.OP, Proto.OP_PROBE) })
-                check(probe.get(Proto.OK) == true && probe.get(Proto.RELEASE_RECEIPT) is Int && probe.getInt(Proto.RELEASE_RECEIPT) == 1) {
-                    "所选后台服务不支持安全收尾，请更新并重新连接该通道。" // l10n:keep agent resource result
-                }
-                check(OwnerScopeProtocol.supported(probe)) { Reasons.of("scopeUnsupported") }
-                check(TargetIdentity.supported(probe.get(Proto.TARGET_IDENTITY_VERSION))) {
-                    Reasons.of("targetIdentityUnsupported")
-                }
-                check(BackgroundPolicy.supportsViewport(viewport, probe.get(Proto.VIEWPORT_VERSION))) {
-                    Reasons.of("viewportUnsupported")
-                }
-                val birth = BackgroundRecoveryProtocol.birth(probe::get, probe::containsKey)
-                    ?: error("所选后台服务不支持资源恢复，请更新并重新连接该通道。") // l10n:keep agent resource result
-                coordinateSupported = probe.get(Proto.BACKGROUND_COORDINATES) is Int &&
-                    probe.getInt(Proto.BACKGROUND_COORDINATES) == 1
-                afterVisualSupported = BackgroundAfterVisual.supported(probe.get(Proto.AFTER_LOCAL_VISUAL))
-                navigationSupported = BackgroundNavigationProtocol.supported(probe.get(Proto.REPLAY_NAVIGATION))
-                check(mayUse() && !resourceIo.previewClosed()) { Reasons.of("deviceUnavailable") }
-                check(resourceScope.begin(birth)) { BackgroundResourceJournal.REFUSAL }
-                val allocated = OwnerScopeProtocol.first(resourceIo, active,
-                    BackgroundRecoveryProtocol.allocate(ownerToken, "task", viewport.preset)) { commit ->
-                    admitUse {
-                        if (!allowed()) throw NotAdmitted()
-                        commit()
-                    }
-                }
-                val actualId = BackgroundRecoveryProtocol.allocationId(allocated::get)
-                    ?: error("后台屏分配未确认，本次启动未执行；请先清理原后台资源。") // l10n:keep agent resource result
-                check(resourceScope.allocated(actualId) { mayUse() && !resourceIo.previewClosed() }) {
-                    "后台屏分配记录尚未确认，本次启动未执行；请先清理原后台资源。" // l10n:keep agent resource result
-                }
-            }
-            // A pin after a failed/late ID commit can never skip the durable barrier.
-            check(resourceScope.allocationReady) { BackgroundResourceJournal.REFUSAL }
             val request = Bundle().apply {
                 putString(Proto.OP, Proto.OP_LAUNCH)
                 putInt(Proto.RELEASE_RECEIPT, 1)
@@ -144,29 +104,35 @@ class BackgroundDisplay internal constructor(
                 putBoolean(Proto.LOCAL_VISUAL, true)
                 putInt(Proto.WANT_IMAGE, 0)
             }
-            val response = OwnerScopeProtocol.execute(active, ownerToken, request) {
+            val response = if (resourceIo.peer() == null) {
+                // Optional features only: a missing field turns that feature off, never the screen.
+                val probe = active.execute(Bundle().apply { putString(Proto.OP, Proto.OP_PROBE) })
+                coordinateSupported = probe.get(Proto.BACKGROUND_COORDINATES) is Int &&
+                    probe.getInt(Proto.BACKGROUND_COORDINATES) == 1
+                afterVisualSupported = BackgroundAfterVisual.supported(probe.get(Proto.AFTER_LOCAL_VISUAL))
+                navigationSupported = BackgroundNavigationProtocol.supported(probe.get(Proto.REPLAY_NAVIGATION))
+                check(mayUse() && !resourceIo.previewClosed()) { Reasons.of("deviceUnavailable") }
+                // The first request creates the screen and pins this peer before any transport write.
+                OwnerScopeProtocol.first(resourceIo, active, request) { commit ->
+                    admitUse {
+                        if (!allowed()) throw NotAdmitted()
+                        commit()
+                    }
+                }
+            } else OwnerScopeProtocol.execute(active, ownerToken, request) {
                 check(admitUse {
                     if (!allowed()) throw NotAdmitted()
-                    check(resourceScope.allocationReady)
                     resourceIo.checkDispatch()
                 }) { Reasons.of("deviceUnavailable") }
             }
-            // Empty allocation never publishes the preview or lends MAIN back.
             onResourceReady(active)
             val result = toResult(response, target, "已在后台屏打开") // l10n:keep agent screen protocol
-            try {
-                resourceIo.commitObservation {
-                    check(currentTarget == target) { Reasons.of("targetIdentityChanged") }
-                    targetReady = result.ok
-                }
-            } catch (_: Exception) { targetReady = false } // A sealed postread cannot erase the original launch ACK.
             result.copy(backgroundOpenConfirmed = result.ok && TargetIdentity.backgroundOpenConfirmed(target,
                 response.get(Proto.OK), response.get(Proto.BACKGROUND_OPEN_EVIDENCE), response.get(Proto.DISPLAY_ID),
                 response.get(Proto.TARGET_IDENTITY_VERSION), response.get(Proto.PKG), response.get(Proto.TARGET_UID)))
         }
     } catch (error: Throwable) {
         clearSnapshot()
-        targetReady = false
         if (resourceIo.peer() == null) resourceIo.seal()
         if (error is NotAdmitted) ActionResult(false, PhoneTasks.STOPPED_MESSAGE) else throw error
     }
@@ -182,11 +148,11 @@ class BackgroundDisplay internal constructor(
         val ocrEpoch = if (requestLocalText) localOcr?.enabledEpoch() else null
         val target = currentTarget ?: return idleSnapshot()
         val pixels = image || automaticImage || (ocrEpoch != null && coordinateSupported && localReadAllowed(target))
-        check(targetReady) { Reasons.of("targetIdentityUnavailable") }
         val request = Bundle().apply {
             putString(Proto.OP, Proto.OP_OBSERVE)
             putString(Proto.OWNER, ownerToken)
             putTarget(this, target)
+            putOpened(this)
             putBoolean(Proto.DETAIL, detail)
             putBoolean(Proto.WANT_IMAGE, pixels)
             if (pixels && coordinateSupported) putInt(Proto.BACKGROUND_COORDINATES, 1)
@@ -199,9 +165,10 @@ class BackgroundDisplay internal constructor(
             throw e
         }
         requireObservation(response.getBoolean(Proto.OK), response.getString(Proto.ERROR), response.getString(Proto.ERROR_DETAIL))
-        requireIdentity(response)
-        val local = if (requestLocalText) readLocalText(response, target, ocrEpoch, started) else null
-        return ocrSnapshot(response, target, false, image || (automaticImage && response.get(Proto.POOR) == true), local, ocrEpoch)
+        val shown = shownApp(response) ?: return emptySnapshot(response)
+        // Local OCR follows the app actually read, under that app's own permission.
+        val local = if (requestLocalText) readLocalText(response, shown, ocrEpoch, started) else null
+        return ocrSnapshot(response, shown, false, image || (automaticImage && response.get(Proto.POOR) == true), local, ocrEpoch)
     }
 
     private fun ocrSnapshot(response: Bundle, target: PhoneAppIdentity, markNew: Boolean, image: Boolean,
@@ -221,7 +188,7 @@ class BackgroundDisplay internal constructor(
     }
 
     private fun localReadAllowed(target: PhoneAppIdentity): Boolean = !Thread.currentThread().isInterrupted &&
-        targetReady && currentTarget == target && mayUse() && !resourceIo.previewClosed() && localOcrAllowed(target)
+        mayUse() && !resourceIo.previewClosed() && localOcrAllowed(target)
 
     /** The receipt is input evidence, never a claim that every pixel has no sensitive content. */
     private fun readLocalText(response: Bundle, target: PhoneAppIdentity, expectedEpoch: Long?,
@@ -286,8 +253,17 @@ class BackgroundDisplay internal constructor(
     internal fun requireObservation(ok: Boolean, code: String?, detail: String?) {
         if (ok) return
         clearSnapshot()
-        if (code == "targetIdentityChanged" || code == "targetIdentityUnavailable") targetReady = false
         throw IllegalStateException(Reasons.of(code, detail))
+    }
+
+    /** The app a reply names as on top; null when the screen shows none. */
+    private fun shownApp(response: Bundle): PhoneAppIdentity? {
+        val pkg = response.getString(Proto.PKG) ?: return null
+        // An unreadable uid is not a different app: keep the one already known for this package.
+        // Another package without any uid (task info and package lookup both failed) cannot be read.
+        return TargetIdentity.shown(pkg, response.get(Proto.TARGET_UID))
+            ?: currentTarget?.takeIf { it.packageName == pkg }
+            ?: throw IllegalStateException(Reasons.of("treeUnavailable"))
     }
 
     override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?): CollectResult =
@@ -319,11 +295,13 @@ class BackgroundDisplay internal constructor(
         val readPackages = LinkedHashSet<String>()
         while (pages < maxPages.coerceIn(1, 30)) {
             if (!allowed()) { stop = PhoneTasks.STOPPED_MESSAGE; break }
-            if (!canRead(source)) { stop = "本页内容不允许读取"; break } // l10n:keep agent screen result
             val snap = observeFrame(detail = false, image = false, requestLocalText = false)
             last = snap
-            if (!canRead(source)) { stop = "本页内容不允许读取"; break } // l10n:keep agent screen result
-            source?.let(readPackages::add)
+            // Each page is read under the rules of the app it shows: a scroll may have brought up
+            // another app, and what was allowed for the first one says nothing about that one.
+            val shown = snap.packageName
+            if (!canRead(shown)) { stop = "本页内容不允许读取"; break } // l10n:keep agent screen result
+            shown?.let(readPackages::add)
             val before = seen.size
             for (e in lastElements) if (e.label.isNotEmpty()) seen.add(e.label)
             pages++
@@ -331,7 +309,7 @@ class BackgroundDisplay internal constructor(
             if (seen.size == before) { stop = "listEnd"; break }
             if (pages >= maxPages) { stop = "pageLimit"; break }
             // Preserve the legacy whole-page collect path; explicit list tracking is separate.
-            val result = perform(PhoneAction.Scroll(snap.id, null, PhoneAction.Direction.DOWN)) { allowed() && canRead(source) }
+            val result = perform(PhoneAction.Scroll(snap.id, null, PhoneAction.Direction.DOWN)) { allowed() && canRead(shown) }
             if (!result.ok) { stop = result.message; break }
         }
         return CollectResult(seen.toList(), pages, stop, last, readPackages.toSet())
@@ -354,8 +332,8 @@ class BackgroundDisplay internal constructor(
         )
     }
 
-    internal fun existingReplayTarget(app: PhoneAppIdentity): Boolean = mayUse() && resourceScope.allocationReady &&
-        resourceIo.existingResource { currentTarget == app && targetReady }
+    internal fun existingReplayTarget(app: PhoneAppIdentity): Boolean = mayUse() &&
+        resourceIo.existingResource { currentTarget == app }
 
     override fun prepareSkillReplayStep(step: io.github.ccch1mneyyy.dsh_app.phone.SkillReplayStep):
         io.github.ccch1mneyyy.dsh_app.phone.Either<String, io.github.ccch1mneyyy.dsh_app.phone.SkillReplayPlan> {
@@ -376,14 +354,14 @@ class BackgroundDisplay internal constructor(
         val facts = navigationFacts(response, target, parsed)
             ?: return io.github.ccch1mneyyy.dsh_app.phone.Either.Left("后台公共导航前读未获完整核验，未执行。") // l10n:keep
         return resourceIo.commitObservation {
-            check(currentTarget == target && targetReady && resourceIo.peer() === peer) { Reasons.of("targetIdentityChanged") }
+            check(currentTarget == target && resourceIo.peer() === peer) { Reasons.of("foregroundChanged") }
             io.github.ccch1mneyyy.dsh_app.phone.Either.Right(BackgroundNavigationPlan(step, target, peer, facts))
         }
     }
 
     private fun navigationCurrent(target: PhoneAppIdentity, peer: PrivilegedChannel): Boolean =
-        mayUse() && resourceScope.allocationReady && resourceIo.existingResource {
-            it === peer && currentTarget == target && targetReady
+        mayUse() && resourceIo.existingResource {
+            it === peer && currentTarget == target
         }
 
     private fun navigationRequest(step: io.github.ccch1mneyyy.dsh_app.phone.SkillReplayStep,
@@ -451,7 +429,7 @@ class BackgroundDisplay internal constructor(
             dispatchUncertain = false // Only the complete matching typed receipt settles this fact.
             if (!allowed()) return ActionResult(false, PhoneTasks.STOPPED_MESSAGE)
             return resourceIo.commitObservation {
-                check(currentTarget == originalTarget && targetReady && resourceIo.peer() === peer) { Reasons.of("targetIdentityChanged") }
+                check(currentTarget == originalTarget && resourceIo.peer() === peer) { Reasons.of("foregroundChanged") }
                 synchronized(this) {
                     check(!closed) { "Original navigation plan was closed" }
                     post = if (facts.post == "satisfied") io.github.ccch1mneyyy.dsh_app.phone.SkillReplayPost.SATISFIED
@@ -472,7 +450,6 @@ class BackgroundDisplay internal constructor(
         val epoch = localOcr?.enabledEpoch()
         // l10n:keep agent screen protocol
         val target = currentTarget ?: return ActionResult(false, "后台屏还没有打开应用")
-        if (!targetReady) return ActionResult(false, Reasons.of("targetIdentityUnavailable"))
         if (action is PhoneAction.Key && action.key != PhoneAction.GlobalKey.BACK) {
             // l10n:keep agent screen protocol
             return ActionResult(false, "后台屏不支持该系统键，未执行；请用返回或打开指定应用")
@@ -486,6 +463,7 @@ class BackgroundDisplay internal constructor(
             if (after.requested) putInt(Proto.AFTER_LOCAL_VISUAL, 1)
             putString(Proto.OWNER, ownerToken)
             putTarget(this, target)
+            putOpened(this)
         }
         when (action) {
             is PhoneAction.Tap -> {
@@ -576,7 +554,7 @@ class BackgroundDisplay internal constructor(
             // The original lane never replays a request after a missing/throwing reply.
             return ActionResult(false, COORDINATE_UNKNOWN)
         } ?: return ActionResult(false, PhoneTasks.STOPPED_MESSAGE)
-        val result = BackgroundCoordinateImage.Result.parse(image, target) { response.get(it) }
+        val result = BackgroundCoordinateImage.Result.parse(image) { response.get(it) }
         if (result == null) { clearSnapshot(); return ActionResult(false, COORDINATE_UNKNOWN) }
         if (!result.ok) {
             clearSnapshot()
@@ -595,23 +573,16 @@ class BackgroundDisplay internal constructor(
 
     override fun foregroundPackage(): String? = currentTarget?.packageName
 
+    /** False: the screen may still exist on [peer]; the caller then disconnects that channel. */
     fun release(): Boolean {
         val acknowledged = try {
-            resourceScope.cleanup { pinned ->
-                val response = OwnerScopeProtocol.execute(pinned, ownerToken, Bundle().apply {
-                    putString(Proto.OP, Proto.OP_RELEASE); putString(Proto.OWNER, ownerToken)
-                    putInt(Proto.RELEASE_RECEIPT, 1)
-                })
-                BackgroundReleaseReceipt.accepts(ownerToken, response.get(Proto.RELEASE_RECEIPT),
-                    response.get(Proto.OWNER), response.get(Proto.OK), response.get("released"), response.get(Proto.TASK_SCOPE_EMPTY),
-                    response.get("neverCreated"))
-            }
+            resourceIo.release { pinned -> OwnerScopeProtocol.release(pinned, ownerToken) }
         } catch (_: Exception) { false }
         coordinateImage.invalidateScope()
         if (!acknowledged) return false
         coordinateImage.clear()
         currentTarget = null
-        targetReady = false
+        openedTarget = null
         lastScreenId = null
         lastElements = emptyList()
         previousLabels = emptySet()
@@ -631,14 +602,9 @@ class BackgroundDisplay internal constructor(
         request.putInt(Proto.TARGET_UID, target.uid)
     }
 
-    private fun requireIdentity(response: Bundle) {
-        val expected = currentTarget
-        if (expected == null || !TargetIdentity.receipt(expected, response.get(Proto.TARGET_IDENTITY_VERSION),
-                response.get(Proto.PKG), response.get(Proto.TARGET_UID))) {
-            clearSnapshot()
-            targetReady = false
-            throw IllegalStateException(Reasons.of("targetIdentityUnavailable"))
-        }
+    /** Reads and actions: the reply says where the opened app went when another one (or none) is on top. */
+    private fun putOpened(request: Bundle) {
+        openedTarget?.let { request.putString(Proto.OPENED_PKG, it.packageName) }
     }
 
     private fun clearSnapshot() {
@@ -659,20 +625,19 @@ class BackgroundDisplay internal constructor(
         coordinateOcrEpoch = null
         val after = if (read.requested && BackgroundAfterVisual.supported(response.get(Proto.AFTER_LOCAL_VISUAL)))
             response.get(Proto.AFTER_VISUAL) as? Bundle else null
-        val valid = after != null && after.get(Proto.OK) == true && currentTarget == read.target &&
-            TargetIdentity.receipt(read.target, after.get(Proto.TARGET_IDENTITY_VERSION),
-                after.get(Proto.PKG), after.get(Proto.TARGET_UID))
-        if (valid) {
+        val shown = if (after != null && after.get(Proto.OK) == true) shownApp(after) else null
+        if (shown != null) {
             val observed = checkNotNull(after)
-            val local = readLocalText(observed, read.target, read.epoch, read.started)
-            return ocrSnapshot(observed, read.target, true, false, local, read.epoch)
+            val local = readLocalText(observed, shown, read.epoch, read.started)
+            return ocrSnapshot(observed, shown, true, false, local, read.epoch)
         }
         // Legacy text remains readable; missing/unknown attachment never grants new coordinates.
         val reason = if (localOcr?.enabled == false) LocalOcrResult.Reason.DISABLED
             else LocalOcrResult.Reason.PRIVACY_UNVERIFIED
         val diagnostic = LocalOcrVisual.Output(LocalOcrBoundary.message(LocalOcrResult.Unavailable(reason)), false, false)
+        val legacyShown = shownApp(response) ?: return null
         return if (response.containsKey(Proto.COUNT) || response.getBoolean(Proto.SECURE))
-            snapshot(response, read.target, true, publishImage = false, localText = diagnostic, coordinatesAllowed = false) else null
+            snapshot(response, legacyShown, true, publishImage = false, localText = diagnostic, coordinatesAllowed = false) else null
     }
 
     private fun toResult(response: Bundle, target: PhoneAppIdentity, okMessage: String, textAction: Boolean = false, after: AfterRead? = null): ActionResult {
@@ -688,22 +653,22 @@ class BackgroundDisplay internal constructor(
             clearSnapshot()
             return ActionResult(false, message, staleSnapshot = true)
         }
-        // The original request's ACK is independent of whether its postread may still publish.
-        val identityMatches = TargetIdentity.receipt(target, response.get(Proto.TARGET_IDENTITY_VERSION),
-            response.get(Proto.PKG), response.get(Proto.TARGET_UID))
-        if (!identityMatches) {
+        if (!ok && response.getString(Proto.ERROR) == "foregroundChanged") {
+            // Another app is on top and the model has not seen it: nothing was sent. The caller
+            // re-reads the screen (as for a stale snapshot) and the next action goes to what it shows.
             clearSnapshot()
-            if (ok) {
-                targetReady = false
-                return ActionResult(false, Reasons.of("targetIdentityUnavailable", null,
-                    textAccepted = textAction && response.get(Proto.ACCEPTED) == true))
-            }
-            if (response.getString(Proto.ERROR) in setOf("targetIdentityChanged", "targetIdentityUnavailable")) targetReady = false
-            return ActionResult(false, message)
+            val now = response.getString(Proto.FG_PKG)
+            // l10n:keep agent target identity
+            val detail = if (now == null) "后台屏上现在没有应用界面" else "后台屏上现在是 $now"
+            return ActionResult(false, Reasons.withDetail(message, detail), staleSnapshot = true)
         }
+        if (!ok) clearSnapshot()
+        // The original request's ACK is independent of whether its postread may still publish.
         val snap = try {
             if (after != null) afterSnapshot(response, after)
-            else if (response.containsKey(Proto.COUNT) || response.getBoolean(Proto.SECURE)) snapshot(response, target, markNew = true) else null
+            else if (response.containsKey(Proto.COUNT) || response.getBoolean(Proto.SECURE))
+                shownApp(response)?.let { snapshot(response, it, markNew = true) } ?: if (ok) emptySnapshot(response) else null
+            else null
         } catch (_: Exception) { clearSnapshot(); null } // Optional postread cannot rewrite the action ACK.
         if (snap == null) coordinateImage.invalidateScope()
         return ActionResult(ok, message, snap)
@@ -712,7 +677,8 @@ class BackgroundDisplay internal constructor(
     private fun snapshot(response: Bundle, target: PhoneAppIdentity, markNew: Boolean, publishImage: Boolean = true,
                          localText: LocalOcrVisual.Output? = null, coordinatesAllowed: Boolean = true,
                          ocrOnlyEpoch: Long? = null): ScreenSnapshot = resourceIo.commitObservation {
-        check(currentTarget == target) { Reasons.of("targetIdentityChanged") }
+        // The app read is now the one actions go to; the per-app rules then apply to it.
+        currentTarget = target
         coordinateOcrEpoch = null
         coordinateImage.clear()
         val id = "b${++counter}"
@@ -723,16 +689,17 @@ class BackgroundDisplay internal constructor(
         coordinateImage.publishScope(id, knownScope, ownerToken, target)
         val pkg = target.packageName
         val appLabel = response.getString(Proto.APP_LABEL)
+        val switched = shownNote(target, appLabel, response.getString(Proto.SHOWN_NOTE))
         if (response.getBoolean(Proto.SECURE)) {
             lastScreenId = id; lastElements = emptyList(); previousLabels = emptySet()
             // l10n:keep agent screen protocol
-            val text = "屏幕 $id · 后台屏 · 受保护页面（支付或密码），已交还用户"
+            val text = "屏幕 $id · 后台屏 · 受保护页面（支付或密码），已交还用户" + switched
             return@commitObservation ScreenSnapshot(id, text, appLabel, pkg, secure = true, readPackages = setOf(pkg))
         }
         if (response.getBoolean(Proto.FRAME_NOT_READY)) {
             lastScreenId = id; lastElements = emptyList(); previousLabels = emptySet()
             // l10n:keep agent screen protocol
-            val text = "屏幕 $id · 后台屏\n" + Reasons.of("frameNotReady")
+            val text = "屏幕 $id · 后台屏\n" + Reasons.of("frameNotReady") + switched
             return@commitObservation ScreenSnapshot(id, text, appLabel, pkg, secure = false, poorTree = true, readPackages = setOf(pkg))
         }
         val elements = buildElements(response, markNew)
@@ -745,7 +712,7 @@ class BackgroundDisplay internal constructor(
         var text = BackgroundTree.render(id, appLabel, portrait, keyboardUp, elements, background = true, poorTree = poor,
             overflow = if (detailed) response.getInt(Proto.ELEMENT_OVERFLOW, 0) else 0,
             detailed = detailed,
-            treeComplete = if (response.containsKey(Proto.TREE_COMPLETE)) response.getBoolean(Proto.TREE_COMPLETE) else null)
+            treeComplete = if (response.containsKey(Proto.TREE_COMPLETE)) response.getBoolean(Proto.TREE_COMPLETE) else null) + switched
         if (response.getBoolean(Proto.IMAGE_OMITTED)) {
             // l10n:keep agent screen protocol
             text += "\n（本页含敏感输入或控件树未完整读取，已省略截图；可继续使用已脱敏的文字信息）"
@@ -814,6 +781,38 @@ class BackgroundDisplay internal constructor(
         0 -> Region.TOP
         2 -> Region.BOTTOM
         else -> Region.MIDDLE
+    }
+
+    /** A line when the app read is not the one opened: which app it is, and where the opened one went. */
+    private fun shownNote(shown: PhoneAppIdentity, appLabel: String?, placement: String?): String {
+        val opened = openedTarget ?: return ""
+        if (opened.packageName == shown.packageName) return ""
+        val name = appLabel?.let { "「$it」（${shown.packageName}）" } ?: shown.packageName
+        // l10n:keep agent target identity
+        return "\n注意：后台屏上现在是$name，不是当初打开的 ${opened.packageName}" + placementNote(placement) +
+            // l10n:keep agent target identity
+            "。上面的内容和元素属于现在这个应用，操作按它自己的规则确认。"
+    }
+
+    private fun placementNote(placement: String?): String = when (placement) {
+        // l10n:keep agent target identity
+        "leftDisplay" -> "；${openedTarget?.packageName} 已离开后台屏，现在在主屏上（可能已在主屏运行，或不支持在后台屏运行），可改在主屏操作，或请用户在主屏关掉它后重新打开"
+        // l10n:keep agent target identity
+        "closed" -> "；${openedTarget?.packageName} 已经退出，需要时重新打开"
+        else -> ""
+    }
+
+    /** The screen has no app on top: say so, and where the opened app went. Nothing to act on. */
+    private fun emptySnapshot(response: Bundle): ScreenSnapshot = resourceIo.commitObservation {
+        coordinateImage.invalidateScope()
+        coordinateImage.clear()
+        coordinateOcrEpoch = null
+        val id = "b${++counter}"
+        lastScreenId = id; lastElements = emptyList(); previousLabels = emptySet()
+        // l10n:keep agent target identity
+        ScreenSnapshot(id, "屏幕 $id · 后台屏 · 现在没有应用界面" + placementNote(response.getString(Proto.SHOWN_NOTE)) +
+            // l10n:keep agent target identity
+            "。可以用 open 重新打开应用。", null, null)
     }
 
     private fun idleSnapshot(): ScreenSnapshot {

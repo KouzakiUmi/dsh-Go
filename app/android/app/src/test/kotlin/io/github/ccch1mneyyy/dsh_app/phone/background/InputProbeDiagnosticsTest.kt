@@ -98,49 +98,5 @@ class InputProbeDiagnosticsTest {
             valid.replace("frame_commit_wait", "private_screen"), valid.replace("TimeoutException", "PrivateScreenException"),
             valid.replace("3000", "-1"), valid.replace("3000", "60001"), valid.replace("3000", "999999999999999999"),
             "x".repeat(161))) assertNull(InputProbeDiagnostics.decode(bad))
-        val old = BackgroundGateState.Snapshot(true, false, "inputWindowNotReady", "old raw $privateText")
-        assertEquals(mapOf("v" to 1, "observed" to false, "connectionFailure" to false),
-            InputProbeDiagnostics.snapshot(old))
-        assertEquals(false, InputProbeDiagnostics.snapshot(BackgroundGateState.Snapshot(gateDetail = valid))["observed"])
-    }
-
-    @Test fun acceptedReceiptSuccessIsExplicitAndDoesNotInventElapsedTime() {
-        val gate = BackgroundGateState()
-        assertTrue(gate.update(gate.begin { true }!!, true, null, true, null, null) is BackgroundGateState.Update.Accepted)
-        assertEquals(mapOf("v" to 1, "observed" to true, "connectionFailure" to false, "result" to "success"),
-            InputProbeDiagnostics.snapshot(gate.snapshot))
-    }
-
-    @Test fun staleAndBusyProbesCannotOverwriteTheOnlySnapshot() {
-        val gate = BackgroundGateState()
-        val old = gate.begin { true }!!
-        val current = gate.begin { true }!!
-        assertTrue(gate.update(current, true, null, true, null, null) is BackgroundGateState.Update.Accepted)
-        val before = gate.snapshot
-        val detail = "probe-v1;stage=presentation_show;type=IllegalStateException;elapsedMs=7"
-        assertSame(BackgroundGateState.Update.Cancelled, gate.update(old, true, null, false, "inputWindowNotReady", detail))
-        assertSame(before, gate.snapshot)
-        assertSame(BackgroundGateState.Update.Busy, gate.update(gate.begin { true }!!, false, "probeBusy", false, "inputWindowNotReady", detail))
-        assertSame(before, gate.snapshot)
-        assertEquals("success", InputProbeDiagnostics.snapshot(gate.snapshot)["result"])
-    }
-
-    @Test fun retryConnectionFailureAndResetFollowExistingGateLifetime() {
-        val gate = BackgroundGateState()
-        val detail = "probe-v1;stage=presentation_show;type=IllegalStateException;elapsedMs=7"
-        assertTrue(gate.update(gate.begin { true }!!, true, null, false, "inputWindowNotReady", detail) is BackgroundGateState.Update.Accepted)
-        val retry = gate.begin { true }!!
-        assertEquals("failure", InputProbeDiagnostics.snapshot(gate.snapshot)["result"])
-        val channel = Any()
-        assertTrue(gate.failed(retry, 1, channel))
-        val failed = gate.snapshot
-        assertEquals(true, InputProbeDiagnostics.snapshot(failed)["connectionFailure"])
-        assertEquals("presentation_show", InputProbeDiagnostics.snapshot(failed)["stage"])
-        gate.connected(failed, Any())
-        assertEquals(false, InputProbeDiagnostics.snapshot(gate.snapshot)["connectionFailure"])
-        gate.reset()
-        assertSame(BackgroundGateState.Update.Cancelled, gate.update(retry, true, null, false, "inputWindowNotReady", detail))
-        assertEquals(mapOf("v" to 1, "observed" to false, "connectionFailure" to false),
-            InputProbeDiagnostics.snapshot(gate.snapshot))
     }
 }

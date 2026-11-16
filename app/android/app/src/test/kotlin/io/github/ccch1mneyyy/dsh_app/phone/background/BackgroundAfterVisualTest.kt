@@ -38,7 +38,7 @@ class BackgroundAfterVisualTest {
             Proto.COUNT to 0, Proto.POOR to true)
         // The producer uses precisely this whitelist before Bundle.putAll.
         ack.putAll(after.filterKeys { it in BackgroundAfterVisual.legacyKeys })
-        val result = BackgroundCoordinateImage.Result.parse(receipt, target, ack::get)
+        val result = BackgroundCoordinateImage.Result.parse(receipt, ack::get)
         assertNotNull(result)
         assertTrue(result!!.ok)
         assertTrue(result.attempted)

@@ -118,9 +118,13 @@ class BackgroundCoordinatesTest {
             Proto.COORDINATE_WIDTH to 48, Proto.COORDINATE_HEIGHT to 48, Proto.TARGET_IDENTITY_VERSION to 1,
             Proto.PKG to scope.target.packageName, Proto.TARGET_UID to scope.target.uid,
             Proto.OK to true, Proto.ACTION_ATTEMPTED to true, Proto.VISUAL_CHANGE to "changed")
-        fun result(fields: Map<String, Any?>) = BackgroundCoordinateImage.Result.parse(receipt, scope.target, fields::get)
+        fun result(fields: Map<String, Any?>) = BackgroundCoordinateImage.Result.parse(receipt, fields::get)
         assertTrue(result(wire)!!.ok)
         assertEquals("changed", result(wire)!!.change)
+        // The tap opened another app: the read after it names that one, and the gesture still went through.
+        val opened = result(wire + (Proto.PKG to "other.app") + (Proto.TARGET_UID to 10999))!!
+        assertTrue(opened.ok); assertTrue(opened.attempted)
+        assertEquals("changed", opened.change)
         for (bad in listOf(wire - Proto.ACTION_ATTEMPTED, wire + (Proto.ACTION_ATTEMPTED to "true"),
             wire + (Proto.OK to 1), wire + (Proto.COORDINATE_OBSERVATION to "old"),
             wire + (Proto.COORDINATE_WIDTH to 48L), wire + (Proto.ACTION_ATTEMPTED to false))) assertNull(result(bad))

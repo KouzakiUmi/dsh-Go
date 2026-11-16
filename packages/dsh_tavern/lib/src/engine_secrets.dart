@@ -18,6 +18,22 @@ state_core.SecretDefinition _secretDefinition(Map<String, Object?> data) {
 
 Object? _secretCopy(Object? value) => jsonDecode(jsonEncode(value));
 
+Map<String, Object?> _gameplayDirectorCard(Map<String, Object?> data, _GameplayRuntime? gameplay) {
+  final card = _directorCard(data);
+  if (gameplay == null) {
+    return card;
+  }
+  final effective = gameplay.effectiveDefinitions['effective']! as Map<String, Object?>;
+  for (final field in const [('state', 'stateDefinition'), ('story', 'story'), ('director', 'director')]) {
+    if (effective.containsKey(field.$1)) {
+      card[field.$2] = _secretCopy(effective[field.$1]);
+    } else {
+      card.remove(field.$2);
+    }
+  }
+  return card;
+}
+
 Map<String, Object?> _currentSecretPersona(TavernEngine engine, StoredChat chat, Map<String, Object?> settings) {
   final selection = engine._personas.resolve(personaId: chat.personaId);
   return _directorPersona(selection, _personaSettings(settings, selection));
@@ -80,8 +96,13 @@ class _SecretLedger {
           valid = false;
           continue;
         }
+        final source = item.containsKey('executionSource')
+            ? _savedGameplayExecutionSource(item['executionSource'])
+            : const state_core.StateExecutionSource.legacy();
         final key = item['bindingKey']! as String;
-        if (key != state_core.secretBindingKey(item['slotId']! as String, item['entityId']! as String) ||
+        if (source == null ||
+            key !=
+                state_core.secretBindingKey(item['slotId']! as String, item['entityId']! as String, source: source) ||
             !keys.add(key) ||
             !ids.add(item['bindingId']! as String)) {
           valid = false;
@@ -111,13 +132,14 @@ class _SecretLedger {
 }
 
 class _SecretProtection {
-  _SecretProtection(Map<String, Object?> data, Map<String, Object?> saved)
-    : definition = _secretDefinition(data),
+  _SecretProtection(Map<String, Object?> data, Map<String, Object?> saved, {this.gameplay})
+    : definition = gameplay?.secrets ?? _secretDefinition(data),
       ledger = _SecretLedger(saved) {
     paths.addAll(definition.protectedPaths);
     paths.addAll(ledger.paths);
     unknown = !ledger.valid || definition.issues.any((issue) => issue['code'] == 'secret_protection_unknown');
   }
+  final _GameplayRuntime? gameplay;
   final state_core.SecretDefinition definition;
   final _SecretLedger ledger;
   final paths = <String>{};
@@ -160,40 +182,69 @@ List<state_core.SecretRelease> _secretReleases(
   Map<String, Object?> saved,
   _SecretProtection protection,
 ) {
-  if (!_secretsEnabled(settings) ||
-      protection.unknown ||
-      !protection.definition.executable ||
-      _storyDefinition(data).defined) {
+  final input = _secretReleaseInput(data, settings, saved, protection);
+  if (input == null) {
     return [];
   }
-  final input = _StateInput(saved);
-  if (!input.writable) return [];
   final result = <state_core.SecretRelease>[];
   for (final binding in protection.ledger.bindings) {
-    if (binding['characterId'] != characterId ||
-        binding['definitionFingerprint'] != protection.definition.fingerprint) {
+    final release = _secretReleaseForBinding(characterId, input, protection, binding);
+    if (release == null) {
       continue;
     }
-    final release = protection.definition.releaseFor(
-      slotId: binding['slotId']! as String,
-      entityId: binding['entityId']! as String,
-      characterId: characterId,
-      value: input.value,
-      valueExists: input.valueExists,
-    );
-    if (release == null || release.path != binding['path'] || release.valueHash != binding['valueHash']) continue;
+    // Keep the live lookup behind the exact definition/path/value gates.
+    // The native verifier never accepts a preview proof reader.
     final proof = engine._store.agentRunById(chatId, binding['bindReceiptId']! as String);
-    if (proof == null ||
-        proof.kind != 'director.secret_bind' ||
-        proof.result['version'] != 1 ||
-        proof.result['committed'] != true ||
-        !_stateRows(proof.result['bindings']).any((row) => _stateJsonEqual(row, binding))) {
-      continue;
+    if (_secretProofMatches(proof, binding)) {
+      result.add(release);
     }
-    result.add(release);
   }
   return result;
 }
+
+_StateInput? _secretReleaseInput(
+  Map<String, Object?> data,
+  Map<String, Object?> settings,
+  Map<String, Object?> saved,
+  _SecretProtection protection,
+) {
+  if (!_secretsEnabled(settings) ||
+      protection.unknown ||
+      !protection.definition.executable ||
+      (protection.gameplay?.story ?? _storyDefinition(data)).defined) {
+    return null;
+  }
+  final input = _StateInput(saved);
+  return input.writable ? input : null;
+}
+
+state_core.SecretRelease? _secretReleaseForBinding(
+  String characterId,
+  _StateInput input,
+  _SecretProtection protection,
+  Map<String, Object?> binding,
+) {
+  if (binding['characterId'] != characterId || binding['definitionFingerprint'] != protection.definition.fingerprint) {
+    return null;
+  }
+  final release = protection.definition.releaseFor(
+    slotId: binding['slotId']! as String,
+    entityId: binding['entityId']! as String,
+    characterId: characterId,
+    value: input.value,
+    valueExists: input.valueExists,
+  );
+  return release == null || release.path != binding['path'] || release.valueHash != binding['valueHash']
+      ? null
+      : release;
+}
+
+bool _secretProofMatches(StoredAgentRun? proof, Map<String, Object?> binding) =>
+    proof != null &&
+    proof.kind == 'director.secret_bind' &&
+    proof.result['version'] == 1 &&
+    proof.result['committed'] == true &&
+    _stateRows(proof.result['bindings']).any((row) => _stateJsonEqual(row, binding));
 
 /// What an ordinary helper actually knows is distinct from its full source
 /// authentication. In particular old notes cannot survive a narrower release.
@@ -220,24 +271,73 @@ _SecretInput _ordinarySecretInput(
   Map<String, Object?> settings,
   Map<String, Object?> source, {
   Map<String, Object?>? authorizationSource,
+  _GameplayRuntime? gameplay,
+}) {
+  final prepared = _prepareSecretInput(data, source, authorizationSource: authorizationSource, gameplay: gameplay);
+  if (!prepared.active) {
+    return _finishSecretInput(prepared, const {}, const []);
+  }
+  final currentReleases = prepared.unavailable
+      ? <state_core.SecretRelease>[]
+      : _secretReleases(
+          engine,
+          chatId,
+          characterId,
+          data,
+          settings,
+          prepared.authorizationSaved,
+          prepared.currentProtection,
+        );
+  final currentKnowledge = {for (final release in currentReleases) _directorHash(_secretKnowledge(release))};
+  final releases = prepared.unavailable
+      ? <state_core.SecretRelease>[]
+      : _secretReleases(engine, chatId, characterId, data, settings, prepared.saved, prepared.protection);
+  return _finishSecretInput(prepared, currentKnowledge, releases);
+}
+
+typedef _SecretInputPreparation = ({
+  Map<String, Object?> state,
+  Map<String, Object?> card,
+  Map<String, Object?> saved,
+  Map<String, Object?> authorizationSaved,
+  _SecretProtection protection,
+  _SecretProtection currentProtection,
+  bool active,
+  bool unavailable,
+});
+
+_SecretInputPreparation _prepareSecretInput(
+  Map<String, Object?> data,
+  Map<String, Object?> source, {
+  Map<String, Object?>? authorizationSource,
+  _GameplayRuntime? gameplay,
 }) {
   final state = _copy(_map(source['state']));
   final saved = <String, Object?>{
     'messageVariables': {if (state['valueExists'] == true) 'dshgo': state['value']},
     if (source.containsKey('secretRuntime')) _secretRuntimeKey: source['secretRuntime'],
   };
-  final protection = _SecretProtection(data, saved);
+  final protection = _SecretProtection(data, saved, gameplay: gameplay);
   final authorization = authorizationSource ?? source;
   final authorizationState = _map(authorization['state']);
   final authorizationSaved = <String, Object?>{
     'messageVariables': {if (authorizationState['valueExists'] == true) 'dshgo': authorizationState['value']},
     if (authorization.containsKey('secretRuntime')) _secretRuntimeKey: authorization['secretRuntime'],
   };
-  final currentProtection = _SecretProtection(data, authorizationSaved);
+  final currentProtection = _SecretProtection(data, authorizationSaved, gameplay: gameplay);
   protection.paths.addAll(currentProtection.paths);
-  final card = _directorCard(data);
+  final card = _gameplayDirectorCard(data, gameplay);
   if (!protection.active && !currentProtection.active) {
-    return _SecretInput(card: card, state: state, releases: [], policy: null, issues: []);
+    return (
+      state: state,
+      card: card,
+      saved: saved,
+      authorizationSaved: authorizationSaved,
+      protection: protection,
+      currentProtection: currentProtection,
+      active: false,
+      unavailable: false,
+    );
   }
   final unavailable =
       protection.unknown ||
@@ -255,28 +355,42 @@ _SecretInput _ordinarySecretInput(
   } else if (state['valueExists'] == true) {
     state['value'] = protection.masked(state['value']);
   }
-  final currentReleases = unavailable
-      ? <state_core.SecretRelease>[]
-      : _secretReleases(engine, chatId, characterId, data, settings, authorizationSaved, currentProtection);
-  final currentKnowledge = {for (final release in currentReleases) _directorHash(_secretKnowledge(release))};
-  final releases = unavailable
-      ? <state_core.SecretRelease>[]
-      : [
-          for (final release in _secretReleases(engine, chatId, characterId, data, settings, saved, protection))
-            if (currentKnowledge.contains(_directorHash(_secretKnowledge(release)))) release,
-        ];
-  final paths = protection.paths.toList()..sort();
+  return (
+    state: state,
+    card: card,
+    saved: saved,
+    authorizationSaved: authorizationSaved,
+    protection: protection,
+    currentProtection: currentProtection,
+    active: true,
+    unavailable: unavailable,
+  );
+}
+
+_SecretInput _finishSecretInput(
+  _SecretInputPreparation prepared,
+  Set<String> currentKnowledge,
+  List<state_core.SecretRelease> sourceReleases,
+) {
+  if (!prepared.active) {
+    return _SecretInput(card: prepared.card, state: prepared.state, releases: [], policy: null, issues: []);
+  }
+  final releases = [
+    for (final release in sourceReleases)
+      if (currentKnowledge.contains(_directorHash(_secretKnowledge(release)))) release,
+  ];
+  final paths = prepared.protection.paths.toList()..sort();
   final knowledge = [for (final release in releases) _secretKnowledge(release)]
     ..sort((a, b) => _directorHash(a).compareTo(_directorHash(b)));
   return _SecretInput(
-    card: card,
-    state: state,
+    card: prepared.card,
+    state: prepared.state,
     releases: releases,
-    policy: {'version': 1, 'protectedPaths': paths, 'unavailable': unavailable, 'knowledge': knowledge},
+    policy: {'version': 1, 'protectedPaths': paths, 'unavailable': prepared.unavailable, 'knowledge': knowledge},
     issues: [
-      ...protection.issues,
-      ...currentProtection.ledger.issues,
-      if (unavailable) _directorIssue('secret_input_unavailable'),
+      ...prepared.protection.issues,
+      ...prepared.currentProtection.ledger.issues,
+      if (prepared.unavailable) _directorIssue('secret_input_unavailable'),
     ],
   );
 }
@@ -314,18 +428,23 @@ Map<String, Object?> _secretAuthorizationSource(TavernEngine engine, String chat
 }
 
 String? _secretTurnContextReason(TavernEngine engine, _Turn turn, Map<String, Object?> settings) {
-  if (turn.secretCardRevision != (engine._directors._cardRevisions[turn.chat.characterId] ?? 0)) {
-    return 'secret_card_changed';
+  final cardReason = _secretCardRevisionReason(turn, engine._directors._cardRevisions[turn.chat.characterId] ?? 0);
+  if (cardReason != null) {
+    return cardReason;
+  }
+  final admission = turn.gameplayAdmission;
+  if (admission != null && !_gameplayAdmissionCurrent(engine, admission)) {
+    return 'secret_gameplay_changed';
   }
   final chat = engine._store.chat(turn.chat.id);
-  if (!_stateJsonEqual(
-    _currentSecretPersona(engine, chat, settings),
-    _directorPersona(turn.personaSelection, turn.settings),
-  )) {
-    return 'secret_persona_changed';
-  }
-  return null;
+  return _secretPersonaReason(turn, _currentSecretPersona(engine, chat, settings));
 }
+
+String? _secretCardRevisionReason(_Turn turn, int revision) =>
+    turn.secretCardRevision == revision ? null : 'secret_card_changed';
+
+String? _secretPersonaReason(_Turn turn, Map<String, Object?> persona) =>
+    _stateJsonEqual(persona, _directorPersona(turn.personaSelection, turn.settings)) ? null : 'secret_persona_changed';
 
 /// The full source was authenticated at admission. Later checks compare the
 /// actual knowledge policy against this request's state, without treating our
@@ -347,15 +466,18 @@ String? _secretDirectorTurnReason(TavernEngine engine, _Turn turn, Map<String, O
     data,
     settings,
     _secretStateSource(saved),
+    gameplay: turn.gameplay,
   ).policy;
-  if (current?['unavailable'] == true || !_stateJsonEqual(current, prior)) {
-    return 'director_secret_knowledge_changed';
-  }
-  return null;
+  return _secretKnowledgeReason(current, prior);
 }
 
+String? _secretKnowledgeReason(Map<String, Object?>? current, Object? prior) =>
+    current?['unavailable'] == true || !_stateJsonEqual(current, prior) ? 'director_secret_knowledge_changed' : null;
+
 List<PromptInjection> _secretTurnInjections(TavernEngine engine, _Turn turn, Map<String, Object?> data) {
-  if (turn.kind == _TurnKind.impersonate || !_secretsEnabled(turn.settings)) return [];
+  if (turn.kind == _TurnKind.impersonate || !_secretsEnabled(turn.settings) || !turn.gameplayValueEligible) {
+    return [];
+  }
   final settings = engine._effectiveSettings(engine._store.chat(turn.chat.id));
   final reason = _secretTurnContextReason(engine, turn, settings);
   if (reason != null) {
@@ -363,8 +485,12 @@ List<PromptInjection> _secretTurnInjections(TavernEngine engine, _Turn turn, Map
     return [];
   }
   final saved = turn.currentState;
-  final protection = _SecretProtection(data, saved);
+  final protection = _SecretProtection(data, saved, gameplay: turn.gameplay);
   final releases = _secretReleases(engine, turn.chat.id, turn.chat.characterId, data, settings, saved, protection);
+  return _secretReleaseInjections(turn, releases);
+}
+
+List<PromptInjection> _secretReleaseInjections(_Turn turn, List<state_core.SecretRelease> releases) {
   final result = <PromptInjection>[];
   for (final release in releases) {
     final sourceId = 'dshgo.secret.release:${_directorHash(_secretKnowledge(release))}';
@@ -420,10 +546,7 @@ Map<String, Object?> _secretTurnTrace(_Turn turn, {bool? attempted}) => {
 /// Called after other request preparation, immediately before generate(). No
 /// async gap is permitted between this check and that client-call attempt.
 TavernTurnInspection? _prepareSecretRequest(TavernEngine engine, _Turn turn) {
-  final director = turn.inspection.director;
-  final directorIncluded =
-      _map(director['beat'])['finalSourceObserved'] == true ||
-      _stateRows(director['prefetch']).any((item) => item['finalSourceObserved'] == true);
+  final directorIncluded = _secretDirectorIncluded(turn);
   final directorReason = _secretDirectorTurnReason(engine, turn, turn.currentState);
   if (directorIncluded && directorReason != null) {
     turn.secretIssues.add(_directorIssue(directorReason));
@@ -438,6 +561,7 @@ TavernTurnInspection? _prepareSecretRequest(TavernEngine engine, _Turn turn) {
       reason != null ||
       !_secretsEnabled(turn.settings) ||
       !_secretsEnabled(settings) ||
+      !turn.gameplayValueEligible ||
       turn.reply == null ||
       chat.currentLeafId != turn.reply!.nodeId) {
     turn.secretIssues.add(_directorIssue(reason ?? 'secret_release_revoked'));
@@ -451,8 +575,22 @@ TavernTurnInspection? _prepareSecretRequest(TavernEngine engine, _Turn turn) {
     data,
     settings,
     saved,
-    _SecretProtection(data, saved),
+    _SecretProtection(data, saved, gameplay: turn.gameplay),
   );
+  _checkSecretIncluded(turn, current);
+  // Construct potentially fallible inspection data before marking attempted.
+  return turn.inspection.copyWith(
+    state: {..._statePreparationTrace(turn), 'secrets': _secretTurnTrace(turn, attempted: true)},
+  );
+}
+
+bool _secretDirectorIncluded(_Turn turn) {
+  final director = turn.inspection.director;
+  return _map(director['beat'])['finalSourceObserved'] == true ||
+      _stateRows(director['prefetch']).any((item) => item['finalSourceObserved'] == true);
+}
+
+void _checkSecretIncluded(_Turn turn, List<state_core.SecretRelease> current) {
   final authorized = {for (final release in current) _directorHash(_secretKnowledge(release))};
   for (final id in turn.secretIncluded) {
     final offered = turn.secretOffered[id]!;
@@ -461,10 +599,6 @@ TavernTurnInspection? _prepareSecretRequest(TavernEngine engine, _Turn turn) {
       throw StateError('An included secret fact is no longer authorized.');
     }
   }
-  // Construct potentially fallible inspection data before marking attempted.
-  return turn.inspection.copyWith(
-    state: {..._statePreparationTrace(turn), 'secrets': _secretTurnTrace(turn, attempted: true)},
-  );
 }
 
 String? _secretDirectorEligibility(
@@ -472,22 +606,31 @@ String? _secretDirectorEligibility(
   StoredAgentRun stored,
   Map<String, Object?> data,
   Map<String, Object?> settings,
-  String? contextNodeId,
-) {
+  String? contextNodeId, {
+  _GameplayRuntime? gameplay,
+}) {
   final chat = engine._store.chat(stored.chatId);
   final source = _secretAuthorizationSource(engine, chat.id, contextNodeId);
-  final current = _ordinarySecretInput(engine, chat.id, chat.characterId, data, settings, source).policy;
+  final current = _ordinarySecretInput(
+    engine,
+    chat.id,
+    chat.characterId,
+    data,
+    settings,
+    source,
+    gameplay: gameplay,
+  ).policy;
   final prior = stored.result['secretPolicy'];
   if (current == null && prior == null) return null;
-  if (current?['unavailable'] == true || prior is! Map<String, Object?> || !_stateJsonEqual(current, prior)) {
-    return 'director_secret_knowledge_changed';
-  }
-  return null;
+  return prior is! Map<String, Object?> ? 'director_secret_knowledge_changed' : _secretKnowledgeReason(current, prior);
 }
 
 state_core.SecretCapability? _captureSecretCapability(_DirectorJob job) {
   final data = job.card;
-  if (data == null || job.nodeId == null || !_secretsEnabled(job.settings) || _storyDefinition(data).defined) {
+  if (data == null ||
+      job.nodeId == null ||
+      !_secretsEnabled(job.settings) ||
+      (job.gameplay?.story ?? _storyDefinition(data)).defined) {
     return null;
   }
   final state = _map(job.source['state']);
@@ -496,7 +639,7 @@ state_core.SecretCapability? _captureSecretCapability(_DirectorJob job) {
     'messageVariables': {'dshgo': state['value']},
     if (job.source.containsKey('secretRuntime')) _secretRuntimeKey: job.source['secretRuntime'],
   };
-  final protection = _SecretProtection(data, saved);
+  final protection = _SecretProtection(data, saved, gameplay: job.gameplay);
   if (protection.unknown || !protection.definition.executable) return null;
   final capability = protection.definition.capture(
     value: state['value'],
@@ -531,8 +674,13 @@ Future<void> _runSecretDirector(_DirectorCoordinator coordinator, _DirectorJob j
   final capability = job.secretCapability;
   final data = job.card;
   if (capability == null || data == null) throw const FormatException('Secret capability is unavailable.');
-  final card = _directorCard(data);
-  job.fingerprint = _directorSourceFingerprint(job.source, card, job.persona);
+  final card = _gameplayDirectorCard(data, job.gameplay);
+  job.fingerprint = _directorSourceFingerprint(
+    job.source,
+    _directorCard(data),
+    job.persona,
+    effectiveConfigId: job.gameplay?.effectiveConfigId,
+  );
   final path = (job.source['path']! as List<Object?>).cast<String>();
   final summaries = engine._store.directorSummaries(job.chatId, path, limit: 20);
   final input = jsonEncode({
@@ -544,14 +692,7 @@ Future<void> _runSecretDirector(_DirectorCoordinator coordinator, _DirectorJob j
     'slots': capability.catalog,
   });
   if (utf8.encode(input).length > 1024 * 1024) throw const FormatException('Secret input exceeds 1 MiB.');
-  final original = job.originalConfig;
-  final config = TavernModelConfig(
-    apiKey: original.apiKey,
-    baseUrl: original.baseUrl,
-    model: original.deepseek ? 'deepseek-flash' : original.model,
-    deepseek: original.deepseek,
-    thinking: false,
-  );
+  final config = _auxiliaryModelConfig(job.originalConfig);
   final tool = capability.strictTool();
   if (tool == null) throw const FormatException('No secret slot is available.');
   if (!config.deepseek) tool['function'] = _map(tool['function'])..remove('strict');
@@ -568,15 +709,24 @@ Future<void> _runSecretDirector(_DirectorCoordinator coordinator, _DirectorJob j
     ],
     'stream': false,
     'max_tokens': 4096,
-    if (config.deepseek) 'thinking': {'type': 'disabled'},
+    if (config.deepseek) 'thinking': {'type': config.thinking ? 'enabled' : 'disabled'},
     'tools': [tool],
-    'tool_choice': {
-      'type': 'function',
-      'function': {'name': 'propose_secrets'},
-    },
+    'tool_choice': config.deepseek && config.thinking
+        ? 'auto'
+        : {
+            'type': 'function',
+            'function': {'name': 'propose_secrets'},
+          },
   };
+  final admission = job.gameplayAdmission;
+  if (admission != null && !_gameplayAdmissionCurrent(engine, admission)) {
+    throw const FormatException('Secret helper gameplay sources changed before the request.');
+  }
   final batch = await coordinator._receive(job, config, body);
   job.cancellation.check();
+  if (admission != null && !_gameplayAdmissionCurrent(engine, admission)) {
+    throw const FormatException('Secret helper gameplay sources changed during the request.');
+  }
   if ((job.finishReason != 'stop' && job.finishReason != 'tool_calls') ||
       !batch.eligibleStructure ||
       batch.issues.isNotEmpty ||
@@ -611,6 +761,7 @@ void _publishSecretDirector(
     'sourceKind': job.nodeId == null ? 'empty' : 'node',
     'sourceNodeId': job.nodeId,
     'sourceFingerprint': job.fingerprint,
+    if (job.gameplay case final gameplay?) 'effectiveConfigId': gameplay.effectiveConfigId,
     'characterId': job.characterId,
     'automatic': job.automatic,
     'startedAt': job.at.toUtc().toIso8601String(),
@@ -630,17 +781,26 @@ void _publishSecretDirector(
         physical = null;
       }
     }
-    engine._store.writeAgentRun(
-      StoredAgentRun(
-        id: job.id,
-        chatId: job.chatId,
-        nodeId: physical,
-        kind: output == null ? 'director.secret_failure' : 'director.secret_proposal',
-        at: now,
-        usage: _directorUsageJson(job.usage),
-        result: raw,
-      ),
-    );
+    engine._store.transaction(() {
+      if (output != null && failure == null) {
+        final admission = job.gameplayAdmission;
+        if (admission != null && !_gameplayAdmissionCurrent(engine, admission)) {
+          _gameplayCaptureConflict();
+        }
+        _ensureGameplayConfig(engine, job.gameplay);
+      }
+      engine._store.writeAgentRun(
+        StoredAgentRun(
+          id: job.id,
+          chatId: job.chatId,
+          nodeId: physical,
+          kind: output == null ? 'director.secret_failure' : 'director.secret_proposal',
+          at: now,
+          usage: _directorUsageJson(job.usage),
+          result: raw,
+        ),
+      );
+    });
   } catch (_) {
     coordinator._transientIssues[job.chatId] = [_directorIssue('secret_result_not_persisted', id: job.id)];
   }
@@ -656,46 +816,244 @@ String? _secretBindingReason(
 ) {
   final chat = engine._store.chat(turn.chat.id);
   final settings = engine._effectiveSettings(chat);
-  if (!_secretsEnabled(turn.settings) ||
-      !_secretsEnabled(settings) ||
-      turn.kind == _TurnKind.impersonate ||
-      _storyDefinition(data).defined) {
-    return 'secret_binding_disabled';
+  final disabled = _secretBindingDisabled(turn, data, settings);
+  if (disabled != null) {
+    return disabled;
   }
   final contextReason = _secretTurnContextReason(engine, turn, settings);
   if (contextReason != null) return contextReason;
-  if (parent == null ||
-      parent != chat.currentLeafId ||
-      parent != turn.chat.currentLeafId ||
-      proposal.result['sourceNodeId'] != parent ||
-      engine._store.hasPhysicalChildren(chat.id, parent)) {
+  final anchorReason = _secretBindingAnchorReason(turn, parent, proposal, chat.currentLeafId);
+  if (anchorReason != null) {
+    return anchorReason;
+  }
+  if (engine._store.hasPhysicalChildren(chat.id, parent!)) {
     return 'secret_source_not_current_physical_leaf';
   }
   final raw = proposal.result;
-  if (proposal.kind != 'director.secret_proposal' ||
-      raw['version'] != 1 ||
-      raw['mode'] != 'secrets' ||
-      raw['success'] != true ||
-      raw['sourceKind'] != 'node' ||
-      raw['characterId'] != chat.characterId ||
-      raw['capability'] is! Map<String, Object?> ||
-      raw['output'] is! Map<String, Object?>) {
-    return 'secret_proposal_unavailable';
+  final proposalReason = _secretProposalShapeReason(proposal, chat.characterId);
+  if (proposalReason != null) {
+    return proposalReason;
   }
   final persisted = engine._store.agentRunById(chat.id, proposal.id);
-  if (persisted == null || persisted.kind != proposal.kind || !_stateJsonEqual(persisted.result, raw)) {
+  if (!_secretProposalPersisted(proposal, persisted)) {
     return 'secret_proposal_not_persisted';
   }
   final selection = engine._personas.resolve(personaId: chat.personaId);
   final persona = _directorPersona(selection, _personaSettings(settings, selection));
-  if (!_stateJsonEqual(persona, _directorPersona(turn.personaSelection, turn.settings))) {
-    return 'secret_persona_changed';
+  final personaReason = _secretPersonaReason(turn, persona);
+  if (personaReason != null) {
+    return personaReason;
   }
   final source = _directorSource(engine, chat.id, parent);
-  if (_directorSourceFingerprint(source, _directorCard(data), persona) != raw['sourceFingerprint']) {
+  if (_directorSourceFingerprint(
+        source,
+        _directorCard(data),
+        persona,
+        effectiveConfigId: turn.gameplay?.effectiveConfigId,
+      ) !=
+      raw['sourceFingerprint']) {
     return 'secret_source_changed';
   }
   return null;
+}
+
+String? _secretBindingDisabled(_Turn turn, Map<String, Object?> data, Map<String, Object?> settings) =>
+    !_secretsEnabled(turn.settings) ||
+        !_secretsEnabled(settings) ||
+        turn.kind == _TurnKind.impersonate ||
+        !turn.gameplayValueEligible ||
+        (turn.gameplay?.story ?? _storyDefinition(data)).defined
+    ? 'secret_binding_disabled'
+    : null;
+
+String? _secretBindingAnchorReason(_Turn turn, String? parent, StoredAgentRun proposal, String? currentLeafId) =>
+    parent == null ||
+        parent != currentLeafId ||
+        parent != turn.chat.currentLeafId ||
+        proposal.result['sourceNodeId'] != parent
+    ? 'secret_source_not_current_physical_leaf'
+    : null;
+
+String? _secretProposalShapeReason(StoredAgentRun proposal, String characterId) {
+  final raw = proposal.result;
+  return proposal.kind != 'director.secret_proposal' ||
+          raw['version'] != 1 ||
+          raw['mode'] != 'secrets' ||
+          raw['success'] != true ||
+          raw['sourceKind'] != 'node' ||
+          raw['characterId'] != characterId ||
+          raw['capability'] is! Map<String, Object?> ||
+          raw['output'] is! Map<String, Object?>
+      ? 'secret_proposal_unavailable'
+      : null;
+}
+
+bool _secretProposalPersisted(StoredAgentRun proposal, StoredAgentRun? persisted) =>
+    persisted != null && persisted.kind == proposal.kind && _stateJsonEqual(persisted.result, proposal.result);
+
+({_StateInput input, _SecretProtection protection})? _secretBindingState(
+  _Turn turn,
+  Map<String, Object?> data,
+  StoredAgentRun proposal,
+  Map<String, Object?> saved,
+) {
+  final input = _StateInput(saved);
+  final protection = _SecretProtection(data, saved, gameplay: turn.gameplay);
+  if (!input.writable || !input.valueExists || protection.unknown || !protection.definition.executable) {
+    turn.secretIssues.add(_directorIssue('secret_state_unavailable', id: proposal.id));
+    return null;
+  }
+  return (input: input, protection: protection);
+}
+
+state_core.SecretCapability? _secretBindingCapability(
+  _Turn turn,
+  StoredAgentRun proposal,
+  _StateInput input,
+  _SecretProtection protection,
+  Map<String, Object?> rawExtra,
+) {
+  if (rawExtra.containsKey('dshgo') && rawExtra['dshgo'] is! Map<String, Object?>) {
+    turn.secretIssues.add(_directorIssue('secret_extra_unavailable', id: proposal.id));
+    return null;
+  }
+  final capability = protection.definition.capture(
+    value: input.value,
+    valueExists: true,
+    boundKeys: protection.ledger.boundKeys,
+    characterId: turn.chat.characterId,
+  );
+  if (!_stateJsonEqual(_secretCapabilityJson(capability), proposal.result['capability'])) {
+    turn.secretIssues.add(_directorIssue('secret_capability_changed', id: proposal.id));
+    return null;
+  }
+  return capability;
+}
+
+({state_core.StateSecretPlan plan, state_core.StateSecretPrepared prepared})? _prepareSecretBindingPlan(
+  _Turn turn,
+  Map<String, Object?> data,
+  StoredAgentRun proposal,
+  _StateInput input,
+  state_core.SecretCapability capability,
+  String invocation,
+) {
+  final state_core.StateSecretPlan plan;
+  try {
+    final output = capability.parseProposal(proposal.result['output']);
+    if (output.facts.isEmpty) {
+      return null;
+    }
+    plan = capability.plan(output, id: '$invocation:secret:${proposal.id}');
+  } on FormatException {
+    turn.secretIssues.add(_directorIssue('secret_proposal_invalid', id: proposal.id));
+    return null;
+  }
+  final session = (turn.gameplay?.state ?? _stateDefinition(data)).startSession(
+    valueExists: true,
+    value: input.value,
+    runtimeExists: input.runtimeExists,
+    runtime: input.runtime,
+    packRuntimeExists: input.packRuntimeExists,
+    packRuntime: input.packRuntime,
+  );
+  final prepared = session.prepareSecretFacts(plan);
+  turn.stateSession = session;
+  turn.secretPrepared = prepared;
+  turn.secretAttempt = {'version': 1, 'proposalRunId': proposal.id, 'committed': false, 'prepare': prepared.toJson()};
+  return (plan: plan, prepared: prepared);
+}
+
+/// The three descendants are constructed before either writer adopts them.
+/// This helper has no clock, store, receipt publication or session restart.
+final class _SecretBindingCandidate {
+  const _SecretBindingCandidate({
+    required this.persistent,
+    required this.extra,
+    required this.generation,
+    required this.restored,
+    required this.bindings,
+  });
+  final Map<String, Object?> persistent, extra, generation;
+  final StoredNode? restored;
+  final List<Map<String, Object?>> bindings;
+}
+
+_SecretBindingCandidate _buildSecretBindingCandidate(
+  _Turn turn, {
+  required StoredAgentRun proposal,
+  required String anchor,
+  required String invocation,
+  required String receiptId,
+  required state_core.StateSecretPlan plan,
+  required state_core.StateSecretPrepared prepared,
+  required state_core.SecretCapability capability,
+  required _SecretProtection protection,
+  required Map<String, Object?> saved,
+  required Map<String, Object?> rawExtra,
+  required StoredNode? target,
+}) {
+  final facts = plan.facts;
+  final bindings = <Map<String, Object?>>[
+    for (var index = 0; index < facts.length; index++)
+      {
+        'bindingId': '$receiptId:$index',
+        'bindingKey': state_core.secretBindingKey(
+          facts[index].slotId,
+          facts[index].entityId,
+          source: protection.definition.source,
+        ),
+        if (protection.definition.source.isPack) 'executionSource': protection.definition.source.toJson(),
+        'slotId': facts[index].slotId, 'entityId': facts[index].entityId, 'path': facts[index].path,
+        'definitionFingerprint': capability.definitionFingerprint,
+        // A string has identical canonicalization in the two hash domains.
+        'valueHash': _directorHash(facts[index].value), 'valueType': 'string',
+        'sourceNodeId': anchor, 'inputSourceFingerprint': proposal.result['sourceFingerprint'],
+        'boundNodeId': anchor, 'beforeStateFingerprint': plan.baselineFingerprint,
+        'afterStateFingerprint': prepared.valueFingerprint, 'generationInvocationId': invocation,
+        'bindReceiptId': receiptId, 'proposalRunId': proposal.id, 'proposalIndex': index,
+        'characterId': turn.chat.characterId, 'policyVersion': 1,
+      },
+  ];
+  final persistent = _copy(saved);
+  persistent['messageVariables'] = {..._map(persistent['messageVariables']), 'dshgo': prepared.value};
+  if (prepared.runtimeExists) {
+    persistent['dshgoStateRuntime'] = prepared.runtime;
+  }
+  if (prepared.packRuntimeExists) {
+    persistent['dshgoPackRuntime'] = prepared.packRuntime;
+  }
+  persistent[_secretRuntimeKey] = protection.ledger.adding(bindings);
+  _stampGameplayConfig(turn.gameplay, persistent);
+  final extra = _stateNodeExtra(rawExtra, persistent, {
+    'secretBinding': {'version': 1, 'runId': receiptId, 'proposalRunId': proposal.id},
+  });
+  final generation = _copy(turn.state);
+  generation['messageVariables'] = _copy(_map(persistent['messageVariables']));
+  if (persistent.containsKey('dshgoStateRuntime')) {
+    generation['dshgoStateRuntime'] = _secretCopy(persistent['dshgoStateRuntime']);
+  }
+  if (persistent.containsKey('dshgoPackRuntime')) {
+    generation['dshgoPackRuntime'] = _secretCopy(persistent['dshgoPackRuntime']);
+  }
+  generation[_secretRuntimeKey] = _secretCopy(persistent[_secretRuntimeKey]);
+  _stampGameplayConfig(turn.gameplay, generation);
+  final restored = target == null
+      ? null
+      : StoredNode(
+          message: target.message,
+          depth: target.depth,
+          extra: _copy(extra),
+          original: _copy(target.original),
+          selectedChildId: target.selectedChildId,
+        );
+  return _SecretBindingCandidate(
+    persistent: persistent,
+    extra: extra,
+    generation: generation,
+    restored: restored,
+    bindings: bindings,
+  );
 }
 
 /// Only the proposal frozen by onListen is considered. Called synchronously
@@ -709,7 +1067,9 @@ void _bindSecretTurn(
   void Function(Map<String, Object?> state, StoredNode? target) adopt,
 ) {
   final proposal = turn.secretCaptured;
-  if (proposal == null) return;
+  if (proposal == null) {
+    return;
+  }
   final reason = _secretBindingReason(engine, turn, data, parent, proposal);
   if (reason != null) {
     turn.secretIssues.add(_directorIssue(reason, id: proposal.id));
@@ -718,88 +1078,43 @@ void _bindSecretTurn(
   turn.cancellation.check();
   final anchor = parent!;
   final saved = engine._stateAt(turn.chat.id, anchor);
-  final input = _StateInput(saved);
-  final protection = _SecretProtection(data, saved);
-  if (!input.writable || !input.valueExists || protection.unknown || !protection.definition.executable) {
-    turn.secretIssues.add(_directorIssue('secret_state_unavailable', id: proposal.id));
+  final state = _secretBindingState(turn, data, proposal, saved);
+  if (state == null) {
     return;
   }
   final rawExtra = engine._store.rawNodeExtra(turn.chat.id, anchor);
-  if (rawExtra.containsKey('dshgo') && rawExtra['dshgo'] is! Map<String, Object?>) {
-    turn.secretIssues.add(_directorIssue('secret_extra_unavailable', id: proposal.id));
-    return;
-  }
-  final capability = protection.definition.capture(
-    value: input.value,
-    valueExists: true,
-    boundKeys: protection.ledger.boundKeys,
-    characterId: turn.chat.characterId,
-  );
-  if (!_stateJsonEqual(_secretCapabilityJson(capability), proposal.result['capability'])) {
-    turn.secretIssues.add(_directorIssue('secret_capability_changed', id: proposal.id));
+  final capability = _secretBindingCapability(turn, proposal, state.input, state.protection, rawExtra);
+  if (capability == null) {
     return;
   }
   final invocation = turn.stateInvocationId ??= _newStateId();
-  final state_core.StateSecretPlan plan;
-  try {
-    final output = capability.parseProposal(proposal.result['output']);
-    if (output.facts.isEmpty) return;
-    plan = capability.plan(output, id: '$invocation:secret:${proposal.id}');
-  } on FormatException {
-    turn.secretIssues.add(_directorIssue('secret_proposal_invalid', id: proposal.id));
+  final preparation = _prepareSecretBindingPlan(turn, data, proposal, state.input, capability, invocation);
+  if (preparation == null || !preparation.prepared.accepted) {
     return;
   }
-  final session = _stateDefinition(
-    data,
-  ).startSession(valueExists: true, value: input.value, runtimeExists: input.runtimeExists, runtime: input.runtime);
-  final prepared = session.prepareSecretFacts(plan);
-  turn.stateSession = session;
-  turn.secretPrepared = prepared;
-  turn.secretAttempt = {'version': 1, 'proposalRunId': proposal.id, 'committed': false, 'prepare': prepared.toJson()};
-  if (!prepared.accepted) return;
+  final plan = preparation.plan;
+  final prepared = preparation.prepared;
 
   // Build all three detached descendants before COMMIT: persistent B,
   // continuation restoration B, and mutable generation G. A later error ends
   // this main turn and never opens a second session with a reset budget.
   final receiptId = '$invocation:secret_bind';
-  final bindings = <Map<String, Object?>>[
-    for (var index = 0; index < plan.facts.length; index++)
-      {
-        'bindingId': '$receiptId:$index',
-        'bindingKey': state_core.secretBindingKey(plan.facts[index].slotId, plan.facts[index].entityId),
-        'slotId': plan.facts[index].slotId, 'entityId': plan.facts[index].entityId, 'path': plan.facts[index].path,
-        'definitionFingerprint': capability.definitionFingerprint,
-        // A string has identical canonicalization in the two hash domains.
-        'valueHash': _directorHash(plan.facts[index].value), 'valueType': 'string',
-        'sourceNodeId': anchor, 'inputSourceFingerprint': proposal.result['sourceFingerprint'],
-        'boundNodeId': anchor, 'beforeStateFingerprint': plan.baselineFingerprint,
-        'afterStateFingerprint': prepared.valueFingerprint, 'generationInvocationId': invocation,
-        'bindReceiptId': receiptId, 'proposalRunId': proposal.id, 'proposalIndex': index,
-        'characterId': turn.chat.characterId, 'policyVersion': 1,
-      },
-  ];
-  final persistent = _copy(saved);
-  persistent['messageVariables'] = {..._map(persistent['messageVariables']), 'dshgo': prepared.value};
-  if (prepared.runtimeExists) persistent['dshgoStateRuntime'] = prepared.runtime;
-  persistent[_secretRuntimeKey] = protection.ledger.adding(bindings);
-  final extra = _stateNodeExtra(rawExtra, persistent, {
-    'secretBinding': {'version': 1, 'runId': receiptId, 'proposalRunId': proposal.id},
-  });
-  final generation = _copy(turn.state);
-  generation['messageVariables'] = _copy(_map(persistent['messageVariables']));
-  if (persistent.containsKey('dshgoStateRuntime')) {
-    generation['dshgoStateRuntime'] = _secretCopy(persistent['dshgoStateRuntime']);
-  }
-  generation[_secretRuntimeKey] = _secretCopy(persistent[_secretRuntimeKey]);
-  final restored = target == null
-      ? null
-      : StoredNode(
-          message: target.message,
-          depth: target.depth,
-          extra: _copy(extra),
-          original: _copy(target.original),
-          selectedChildId: target.selectedChildId,
-        );
+  final candidate = _buildSecretBindingCandidate(
+    turn,
+    proposal: proposal,
+    anchor: anchor,
+    invocation: invocation,
+    receiptId: receiptId,
+    plan: plan,
+    prepared: prepared,
+    capability: capability,
+    protection: state.protection,
+    saved: saved,
+    rawExtra: rawExtra,
+    target: target,
+  );
+  final bindings = candidate.bindings, extra = candidate.extra, generation = candidate.generation;
+  final restored = candidate.restored;
   final audit = StoredAgentRun(
     id: receiptId,
     chatId: turn.chat.id,
@@ -823,19 +1138,41 @@ void _bindSecretTurn(
     },
   );
   final committedTrace = <String, Object?>{...turn.secretAttempt!, 'committed': true, 'bindReceiptId': receiptId};
-  engine._store.transaction(
-    () {
-      turn.cancellation.check();
-      if (_secretBindingReason(engine, turn, data, anchor, proposal) != null ||
-          !_stateJsonEqual(engine._store.rawNodeExtra(turn.chat.id, anchor), rawExtra)) {
-        throw StateError('Secret source changed after preparation.');
-      }
-      engine._store.updateMessage(turn.chat.id, anchor, extra: extra);
-      engine._store.writeAgentRun(audit);
-    },
-    onCommitted: () {
-      adopt(generation, restored);
-      turn.secretAttempt = committedTrace;
-    },
-  );
+  void checkBinding() {
+    turn.cancellation.check();
+    if (_secretBindingReason(engine, turn, data, anchor, proposal) != null ||
+        !_stateJsonEqual(engine._store.rawNodeExtra(turn.chat.id, anchor), rawExtra)) {
+      throw StateError('Secret source changed after preparation.');
+    }
+    _ensureGameplayConfig(engine, turn.gameplay);
+  }
+
+  if (turn.toolOwner case final owner?) {
+    engine._store.commitToolSecretBinding(
+      owner,
+      anchorNodeId: anchor,
+      expectedExtra: rawExtra,
+      extra: extra,
+      audit: audit,
+      checkBinding: checkBinding,
+      prepared: (generation, restored, committedTrace),
+      onCommitted: (committed) {
+        turn.toolPhase = committed.ownership.phase;
+        turn.secretAttempt = committed.value.$3;
+        adopt(committed.value.$1, committed.value.$2);
+      },
+    );
+  } else {
+    engine._store.transaction(
+      () {
+        checkBinding();
+        engine._store.updateMessage(turn.chat.id, anchor, extra: extra);
+        engine._store.writeAgentRun(audit);
+      },
+      onCommitted: () {
+        turn.secretAttempt = committedTrace;
+        adopt(generation, restored);
+      },
+    );
+  }
 }

@@ -32,7 +32,7 @@ class PrivilegedInputReasonTest {
     }
 
     @Test fun identityFailurePreservesAcceptedTextWithoutReplayingOrClaimingSuccess() {
-        for (code in listOf("targetIdentityChanged", "targetIdentityUnavailable")) {
+        for (code in listOf("targetIdentityChanged", "targetIdentityUnavailable", "foregroundChanged")) {
             val accepted = Reasons.of(code, null, textAccepted = true)
             assertTrue(accepted.contains("已接受文字请求"))
             assertTrue(accepted.contains("不要自动重复"))

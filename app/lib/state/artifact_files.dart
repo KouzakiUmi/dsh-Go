@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../l10n/l10n.dart';
+import 'android_features.dart' show operatingSystemProvider;
 import 'artifacts.dart';
 import 'connection_state.dart';
 
@@ -58,20 +59,24 @@ String artifactErrorText(Object error) {
 /// environment, or in shared storage): Android gets them in place. A remote
 /// Host's file is downloaded once into the app cache (`artifacts/`), keyed by
 /// Host, session and path, and fetched again when the Host reports a new
-/// version.
+/// version. HarmonyOS logical workspace files use the same Session-aware
+/// byte service because their logical paths are not platform file paths.
 class ArtifactFiles {
   ArtifactFiles({
     required this.connection,
     required this.channel,
     Future<void> Function(ShareParams params)? share,
     Future<Directory> Function()? cacheRoot,
+    String? operatingSystem,
   }) : _share = share ?? _systemShare,
-       _cacheRoot = cacheRoot ?? getTemporaryDirectory;
+       _cacheRoot = cacheRoot ?? getTemporaryDirectory,
+       _operatingSystem = operatingSystem ?? Platform.operatingSystem;
 
   final HostConnection? connection;
   final FilesChannel channel;
   final Future<void> Function(ShareParams params) _share;
   final Future<Directory> Function() _cacheRoot;
+  final String _operatingSystem;
 
   static Future<void> _systemShare(ShareParams params) async {
     await SharePlus.instance.share(params);
@@ -99,7 +104,12 @@ class ArtifactFiles {
     final root = await _cacheRoot();
     final key = _fnv('pdf\n${conn.hostId ?? conn.label}\n$sessionId\n${artifact.path}');
     final dir = Directory('${root.path}/artifacts/$key');
-    final target = File('${dir.path}/${_safeName(artifact.name)}.pdf');
+    // 纪要.docx → 纪要.pdf: swapping the extension keeps a name the phone could
+    // already store within its 255-byte limit (appending .pdf might not).
+    final base = _safeName(artifact.name);
+    final dot = base.lastIndexOf('.');
+    final pdfName = '${dot > 0 ? base.substring(0, dot) : base}.pdf';
+    final target = File('${dir.path}/$pdfName');
     final marker = File('${dir.path}/.version');
     if (target.existsSync() && marker.existsSync() && marker.readAsStringSync() == stat.version) {
       return target;
@@ -108,7 +118,7 @@ class ArtifactFiles {
     if (rendered.pdf.isEmpty) throw const ArtifactError('unsupported');
     await dir.create(recursive: true);
     final staging = await dir.createTemp('.part-');
-    final part = File('${staging.path}/${_safeName(artifact.name)}.pdf');
+    final part = File('${staging.path}/$pdfName');
     try {
       await part.writeAsBytes(rendered.pdf, flush: true);
       part.renameSync(target.path);
@@ -129,7 +139,10 @@ class ArtifactFiles {
   }) async {
     final conn = connection;
     if (conn == null) throw const ArtifactError('offline');
-    if (conn.isLocal) {
+    // This prefix selects a transport, not authority. The existing Session
+    // file service still resolves the path and checks its workspace grant.
+    final sessionCopy = conn.isLocal && _operatingSystem == 'ohos' && artifact.path.startsWith('/workspaces/');
+    if (conn.isLocal && !sessionCopy) {
       final host = await channel.resolveGuest(artifact.path);
       if (host == null) throw const ArtifactError('missing');
       return File(host);
@@ -169,6 +182,7 @@ class ArtifactFiles {
               ? null
               : (received, total) => onProgress(total == null || total == 0 ? null : received / total),
         );
+        if (sessionCopy) await sink.flush();
       } finally {
         await sink.close();
       }
@@ -250,8 +264,11 @@ String _fnv(String text) {
 }
 
 final artifactFilesProvider = Provider<ArtifactFiles>(
-  (ref) =>
-      ArtifactFiles(connection: ref.watch(activeConnectionProvider).value, channel: ref.watch(filesChannelProvider)),
+  (ref) => ArtifactFiles(
+    connection: ref.watch(activeConnectionProvider).value,
+    channel: ref.watch(filesChannelProvider),
+    operatingSystem: ref.watch(operatingSystemProvider),
+  ),
 );
 
 /// [ArtifactFiles.thumbnail], cached per (session, path) while shown.

@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../l10n/l10n.dart';
 import '../../../performance/performance_state.dart';
+import '../../../state/android_features.dart';
 import '../../../state/ask_ai.dart' show askAiAvailableProvider;
 import '../../../state/engine_settings_state.dart';
 import '../../../state/hosts_state.dart';
@@ -18,6 +19,7 @@ import '../../../state/phone_state.dart';
 import '../../../state/plugin_config/plugin_config_state.dart';
 import '../../../state/plugins_state.dart';
 import '../../../state/sessions_state.dart';
+import '../../../state/workshop_dependencies.dart' show workshopOriginProvider;
 import '../../common/app_sheet.dart' show groupTitleStyle;
 import '../../common/ask_ai.dart';
 import '../../common/capsule_chip.dart';
@@ -70,6 +72,7 @@ String? unavailableReason(WidgetRef ref, SpotCondition? condition, L10n l10n) {
     SpotCondition.phoneControlOn => ref.watch(phoneProvider.select((s) => !s.loaded || s.status.enabled)),
     SpotCondition.nativeUi => ref.watch(askAiAvailableProvider),
     SpotCondition.openChat => ref.watch(currentSessionProvider) != null,
+    SpotCondition.workshopBuilt => ref.watch(workshopOriginProvider) != null,
     SpotCondition.animationsOn =>
       !ref.watch(performanceDefaultsProvider.select((d) => d.reduceMotion)) &&
           !WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations,
@@ -156,15 +159,17 @@ class _SettingsSearchPageState extends ConsumerState<SettingsSearchPage> {
     final l10n = context.l10n;
     final query = _field.text;
     final extra = ref.watch(_pluginSpotsProvider);
-    final hits = query.trim().isEmpty
-        ? const <SearchHit>[]
-        : searchSettings(
-            query,
-            spots: [...SettingsIndex.spots, ...extra],
-            features: ref.watch(featureSectionsProvider),
-            zh: _zh,
-            en: _en,
-          );
+    final androidFeatures = ref.watch(androidSystemFeaturesProvider);
+    List<SearchHit> search({required bool androidFeatures}) => searchSettings(
+      query,
+      spots: [...SettingsIndex.spots, ...extra],
+      features: ref.watch(featureSectionsProvider),
+      zh: _zh,
+      en: _en,
+      androidFeatures: androidFeatures,
+      ios: ref.watch(operatingSystemProvider) == 'ios',
+    );
+    final hits = query.trim().isEmpty ? const <SearchHit>[] : search(androidFeatures: androidFeatures);
     final session = ref.watch(currentSessionProvider);
     return AppPage(
       title: l10n.searchSettingsHint,
@@ -186,7 +191,7 @@ class _SettingsSearchPageState extends ConsumerState<SettingsSearchPage> {
             if (query.trim().isEmpty)
               ..._idle(context)
             else if (hits.isEmpty)
-              _NoResults(query: query.trim())
+              _NoResults(query: query.trim(), notHere: !androidFeatures && search(androidFeatures: true).isNotEmpty)
             else ...[
               for (final (title, group) in [
                 (l10n.commonSettings, hits.where((h) => !h.isFeature).toList()),
@@ -291,7 +296,7 @@ class _SpotResult extends ConsumerWidget {
         unavailableReason(ref, spot.condition, l10n) ??
         (spot.isEntry ? null : unavailableReason(ref, SettingsIndex.page(spot.page).condition, l10n));
     return ListPageRow(
-      title: spot.title(l10n),
+      title: spot.titleOn(harmony: ref.watch(operatingSystemProvider) == 'ohos')(l10n),
       titleNote: hit.synonym,
       subtitle: reason ?? SettingsIndex.path(spot, l10n).join(' › '),
       onTap: () => onOpen(spot, available: reason == null),
@@ -302,9 +307,12 @@ class _SpotResult extends ConsumerWidget {
 /// No settings matched: the question, as typed, for 问 AI (not in 网页模式,
 /// where there is no native chat to take it).
 class _NoResults extends ConsumerWidget {
-  const _NoResults({required this.query});
+  const _NoResults({required this.query, required this.notHere});
 
   final String query;
+
+  /// Android's version would have found it: a feature this one lacks, not a typo.
+  final bool notHere;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -312,7 +320,7 @@ class _NoResults extends ConsumerWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        FeatureMessage(icon: AppIcons.noResults, title: l10n.searchNoResults),
+        FeatureMessage(icon: AppIcons.noResults, title: notHere ? l10n.harmonySearchUnavailable : l10n.searchNoResults),
         if (ref.watch(askAiAvailableProvider))
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),

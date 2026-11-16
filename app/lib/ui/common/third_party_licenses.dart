@@ -1,50 +1,30 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Registers the licences of the third-party code, assets and libraries that ship in the APK
-/// with [LicenseRegistry], so `showLicensePage` lists them. Call once in `main()` before
-/// `runApp`; the bundled fonts are registered by `registerFontLicenses()`.
+/// or HAP with [LicenseRegistry], so `showLicensePage` lists them. Call once in `main()` before
+/// `runApp`; the bundled fonts are registered by `registerFontLicenses()`. [os] is the OS by
+/// Dart's name for it, for tests.
 ///
 /// MIT, Apache-2.0 and LGPL-3.0 require the notices to travel with every copy, and the APK is
 /// a copy, so the one-line source headers are not enough. Copyright holders and licences match
 /// THIRD_PARTY_NOTICES.md at the repository root; each package appears in exactly one entry.
-void registerThirdPartyLicenses() {
+void registerThirdPartyLicenses({String? os}) {
+  final harmony = (os ?? Platform.operatingSystem) == 'ohos';
   LicenseRegistry.addLicense(
-    () => Stream<LicenseEntry>.fromIterable(const [
-      // Code copied or adapted into the source.
-      LicenseEntryWithLineBreaks(<String>['PiPilot'], _pipilotMit),
-      LicenseEntryWithLineBreaks(<String>['DeepSeek Harness'], _dshMit),
-      LicenseEntryWithLineBreaks(<String>['Phase'], _phaseNotice),
-      LicenseEntryWithLineBreaks(<String>['DS Bot'], _dsBotNotice + _apache2),
-      LicenseEntryWithLineBreaks(<String>['ds-harness-remote'], _dshRemoteMit),
-      LicenseEntryWithLineBreaks(<String>['DSHA'], _dshaMit),
-      // Libraries bundled by Gradle.
-      LicenseEntryWithLineBreaks(<String>['Google ML Kit Text Recognition (Chinese)'], _mlkitNotice),
-      LicenseEntryWithLineBreaks(<String>['Shizuku-API'], _shizukuMit),
-      LicenseEntryWithLineBreaks(<String>['libadb-android'], _libadbNotice + _apache2),
-      LicenseEntryWithLineBreaks(<String>['spake2-android'], '$_spake2Notice$_lgpl3\n$_gpl3'),
-      LicenseEntryWithLineBreaks(<String>['Conscrypt'], '$_conscryptNotice\n$_apache2'),
-      LicenseEntryWithLineBreaks(<String>['Bouncy Castle'], _bouncyCastle),
-      LicenseEntryWithLineBreaks(<String>['XZ for Java'], _xzForJava0bsd),
-      LicenseEntryWithLineBreaks(<String>['AndroidX WebKit'], _androidxWebkitNotice + _apache2),
-      // Native launcher built from source (runtime/tawcroot/build.py).
-      LicenseEntryWithLineBreaks(<String>['tawcroot (tawc)'], _tawcMit),
-      // flutter_webrtc's own MIT licence comes with its pub package; these are its NOTICE and
-      // the native WebRTC it bundles.
-      LicenseEntryWithLineBreaks(<String>['flutter_webrtc'], _flutterWebrtcNotice + _apache2),
-      LicenseEntryWithLineBreaks(<String>['AudioSwitch'], _audioSwitchNotice + _apache2),
-      // Icons and data.
-      LicenseEntryWithLineBreaks(<String>['Phosphor Icons'], _phosphorMit),
-      LicenseEntryWithLineBreaks(<String>['Material Icons'], _materialIconsNotice + _apache2),
-      LicenseEntryWithLineBreaks(<String>['discourse-emojis'], _discourseEmojisMit),
-    ]),
+    () => Stream<LicenseEntry>.fromIterable([..._copiedCode, ...harmony ? _inTheHap : _inTheApk, ..._iconsAndData]),
   );
   LicenseRegistry.addLicense(() async* {
-    // Preserve the complete release-tag bundle verbatim, including all upstream
-    // third-party sections. The embedded top-level notice also supplies PATENTS.
-    // Provenance and the binary/asset hashes are in THIRD_PARTY_NOTICES.md.
-    final bundledNotices = await rootBundle.loadString('assets/licenses/webrtc-150.7871.04.md');
-    yield LicenseEntryWithLineBreaks(<String>['WebRTC'], '$_webrtcBsd\n$bundledNotices');
+    // The HAP carries no WebRTC (flutter_webrtc is Android's).
+    if (!harmony) {
+      // Preserve the complete release-tag bundle verbatim, including all upstream
+      // third-party sections. The embedded top-level notice also supplies PATENTS.
+      // Provenance and the binary/asset hashes are in THIRD_PARTY_NOTICES.md.
+      final bundledNotices = await rootBundle.loadString('assets/licenses/webrtc-150.7871.04.md');
+      yield LicenseEntryWithLineBreaks(<String>['WebRTC'], '$_webrtcBsd\n$bundledNotices');
+    }
     final unicodeNotice = await rootBundle.loadString('assets/licenses/unicode-15.0.txt');
     yield LicenseEntryWithLineBreaks(<String>['Unicode Character Database (15.0.0)'], unicodeNotice);
     // The libraries a card's scripts find on the tavern's canvas page, as 酒馆助手's pages
@@ -55,8 +35,70 @@ void registerThirdPartyLicenses() {
     yield LicenseEntryWithLineBreaks(<String>[
       'Lodash',
     ], await rootBundle.loadString('assets/licenses/lodash-4.17.21-LICENSE.txt'));
+    // The streaming recognizer's model, downloaded on demand (語音 › 实时识别). HarmonyOS
+    // has no streaming recognizer (sherpa-onnx ships Android's libraries only).
+    if (!harmony) {
+      yield LicenseEntryWithLineBreaks(<String>[
+        'Streaming Zipformer zh-en (sherpa-onnx)',
+      ], await rootBundle.loadString('assets/licenses/streaming-asr-model-APACHE-2.0.txt'));
+    }
   });
 }
+
+/// Code copied or adapted into the source.
+const _copiedCode = <LicenseEntry>[
+  LicenseEntryWithLineBreaks(<String>['PiPilot'], _pipilotMit),
+  LicenseEntryWithLineBreaks(<String>['DeepSeek Harness'], _dshMit),
+  LicenseEntryWithLineBreaks(<String>['Phase'], _phaseNotice),
+  LicenseEntryWithLineBreaks(<String>['DS Bot'], _dsBotNotice + _apache2),
+  LicenseEntryWithLineBreaks(<String>['ds-harness-remote'], _dshRemoteMit),
+  LicenseEntryWithLineBreaks(<String>['DSHA'], _dshaMit),
+  LicenseEntryWithLineBreaks(<String>['Libraries.dev'], _librariesDevMit),
+  LicenseEntryWithLineBreaks(<String>['Paper Shaders'], _paperShadersNotice + _apache2),
+];
+
+/// Libraries bundled by Gradle.
+const _inTheApk = <LicenseEntry>[
+  LicenseEntryWithLineBreaks(<String>['Google ML Kit Text Recognition (Chinese)'], _mlkitNotice),
+  LicenseEntryWithLineBreaks(<String>['Shizuku-API'], _shizukuMit),
+  LicenseEntryWithLineBreaks(<String>['libadb-android'], _libadbNotice + _apache2),
+  LicenseEntryWithLineBreaks(<String>['spake2-android'], '$_spake2Notice$_lgpl3\n$_gpl3'),
+  LicenseEntryWithLineBreaks(<String>['Conscrypt'], '$_conscryptNotice\n$_apache2'),
+  LicenseEntryWithLineBreaks(<String>['Bouncy Castle'], _bouncyCastle),
+  LicenseEntryWithLineBreaks(<String>['XZ for Java'], _xzForJava0bsd),
+  LicenseEntryWithLineBreaks(<String>['AndroidX WebKit'], _androidxWebkitNotice + _apache2),
+  LicenseEntryWithLineBreaks(<String>['ONNX Runtime'], _onnxRuntimeMit),
+  // Speech models bundled as assets (app/android/app/src/main/assets/speech).
+  LicenseEntryWithLineBreaks(<String>['Silero VAD'], _sileroMit),
+  LicenseEntryWithLineBreaks(<String>['smart-turn'], _smartTurnBsd2),
+  // Native launcher built from source (runtime/tawcroot/build.py).
+  LicenseEntryWithLineBreaks(<String>['tawcroot (tawc)'], _tawcMit),
+  // flutter_webrtc's own MIT licence comes with its pub package; these are its NOTICE and
+  // the native WebRTC it bundles.
+  LicenseEntryWithLineBreaks(<String>['flutter_webrtc'], _flutterWebrtcNotice + _apache2),
+  LicenseEntryWithLineBreaks(<String>['AudioSwitch'], _audioSwitchNotice + _apache2),
+];
+
+/// What the HAP carries instead: Node in its native library, and the virtual shell's
+/// packages, whose own licence texts go with the runtime in the package.
+const _inTheHap = <LicenseEntry>[
+  LicenseEntryWithLineBreaks(<String>['Node.js'], _nodeMit),
+  LicenseEntryWithLineBreaks(<String>['HarmonyOS runtime packages'], _harmonyRuntimeNotice),
+];
+
+/// Icons and data.
+const _iconsAndData = <LicenseEntry>[
+  LicenseEntryWithLineBreaks(<String>['Phosphor Icons'], _phosphorMit),
+  LicenseEntryWithLineBreaks(<String>['Material Icons'], _materialIconsNotice + _apache2),
+  LicenseEntryWithLineBreaks(<String>['discourse-emojis'], _discourseEmojisMit),
+];
+
+const _harmonyRuntimeNotice = '''
+just-bash 3.6.0, isomorphic-git 1.44.9, re2js 1.3.3 and the packages they depend on (91 in all)
+run the on-device engine's shell, search and Git on HarmonyOS. Each one keeps its own licence:
+the texts are in the runtime this app unpacks, under runtime/ohos/licenses/texts, and listed in
+runtime/ohos/licenses/README.md in the source.
+''';
 
 /// The MIT terms; each MIT entry puts its own copyright line above them.
 const _mitTerms = '''
@@ -78,6 +120,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ''';
+const _nodeMit =
+    '''
+Node.js 24.22.1
+Copyright Node.js contributors. All rights reserved.
+
+$_mitTerms
+Node.js bundles third-party components under their own licences, listed in the LICENSE file
+of its source release.
+''';
 
 /// PiPilot: the files headed `Portions derived from PiPilot` (chat screen, common widgets,
 /// drawer shell and theme).
@@ -98,12 +149,17 @@ Copyright (c) 2026 DeepSeek
 $_mitTerms''';
 
 /// Phase: phone control (accessibility actions, control overlay and the do-not-disturb
-/// privileged display), used with the author's permission.
+/// privileged display), used under the MIT License with the author's permission.
 const _phaseNotice = '''
 Portions of the phone control feature are derived from Phase
-(https://github.com/CikeSeven/phase), Copyright (c) 2026 CikeSeven,
-used with the author's permission.
-''';
+(https://github.com/CikeSeven/phase), used under the MIT License
+with the author's permission.
+
+MIT License
+
+Copyright (c) 2026 CikeSeven
+
+$_mitTerms''';
 
 /// DS Bot: its NOTICE lines, what is derived from it, then the Apache License 2.0.
 const _dsBotNotice = '''
@@ -132,6 +188,71 @@ MIT License
 Copyright (c) 2026 qiannianhuanxiang
 
 $_mitTerms''';
+
+/// ONNX Runtime for Android (`com.microsoft.onnxruntime:onnxruntime-android`), 1.27.0.
+const _onnxRuntimeMit = '''
+MIT License
+
+Copyright (c) Microsoft Corporation
+
+$_mitTerms''';
+
+/// Silero VAD v6.2 (`silero_vad.onnx`).
+const _sileroMit = '''
+MIT License
+
+Copyright (c) 2020-present Silero Team
+
+$_mitTerms''';
+
+/// smart-turn v3.2 (`smart-turn-v3.2-cpu.onnx`), Pipecat.
+const _smartTurnBsd2 = r'''
+BSD 2-Clause License
+
+Copyright (c) 2024–2025, Daily
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.''';
+/// Libraries.dev (UI effects in lib/ui/fx), commit 387b049.
+const _librariesDevMit = '''
+MIT License
+
+Copyright (c) 2026 Jakub Antalik
+
+$_mitTerms''';
+
+/// Paper Shaders' liquidMetal stage, by way of Libraries.dev metal-fx (its NOTICE, verbatim but for the path).
+const _paperShadersNotice = '''
+This product includes software developed by Paper Design, Inc.
+
+  Paper Shaders (https://github.com/paper-design/shaders)
+  Copyright (c) Paper Design, Inc.
+  Licensed under the Apache License, Version 2.0
+  http://www.apache.org/licenses/LICENSE-2.0
+
+The liquid-metal material in app/shaders/fx/metal_liquid.frag is the
+`liquidMetal` fragment stage of @paper-design/shaders 0.0.80, as used by
+Libraries.dev metal-fx, translated to Flutter GLSL.
+
+''';
 
 /// Shizuku-API (`dev.rikka.shizuku:api`, `provider`).
 /// tawc's tawcroot launcher (libtawcroot.so), commit a49a4075; everything outside tawc's deps/ is MIT.

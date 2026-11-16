@@ -24,21 +24,34 @@ class _ScriptVariableVersion {
 }
 
 class _ScriptDataContext {
-  _ScriptDataContext(this.chatId, this.hostId, this.hostRevision, this.hostData, this.definition, this.settings);
+  _ScriptDataContext(
+    this.chatId,
+    this.hostId,
+    this.hostRevision,
+    this.hostData,
+    this.definition,
+    this.settings, {
+    this.gameplay,
+    this.gameplayAdmission,
+  });
   final String chatId;
   final String hostId;
   final int hostRevision;
   final Map<String, Object?> hostData;
   final state_core.StateDefinition definition;
   final Map<String, Object?> settings;
+  final _GameplayRuntime? gameplay;
+  final _GameplayAdmission? gameplayAdmission;
 }
 
 class _ScriptPreparedData {
-  _ScriptPreparedData(this.state, this.stateEdit, this.audit, this.run);
+  _ScriptPreparedData(this.state, this.stateEdit, this.audit, this.run, {this.adoptedGameplay, this.gameplayAdmission});
   final Map<String, Object?> state;
   final TavernStateEditResult? stateEdit;
   final Map<String, Object?>? audit;
   final Map<String, Object?>? run;
+  final _GameplayRuntime? adoptedGameplay;
+  final _GameplayAdmission? gameplayAdmission;
 }
 
 extension _ScriptVariableOperations on _ScriptCoordinator {
@@ -375,9 +388,11 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
             return result(value);
           });
         case TavernVariableScope.chat:
-          saved = await _dataWrite(resolved.capture!, () {
+          saved = await _dataWrite(resolved.capture!, (permit) {
             late ({String? leaf, Map<String, Object?> values}) adopted;
-            return engine._store.transaction(
+            return _toolPreparationSql(
+              engine,
+              permit,
               () {
                 final chat = engine._store.chat(target.chatId!);
                 final value = prepare(_ScriptRawVariable(true, chat.variables));
@@ -402,10 +417,15 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
           });
         case TavernVariableScope.message:
           final ref = target.messageRef!;
-          final dataContext = await _prepareDataContext(ref.chatId);
+          final dataContext = await _prepareDataContext(
+            ref.chatId,
+            forceGameplay: engine._stateAt(ref.chatId, ref.nodeId).containsKey('dshgoPackDefinitionConfigId'),
+          );
           saved = await _dataWrite(
             resolved.capture!,
-            () => engine._store.transaction(
+            (permit) => _toolPreparationSql(
+              engine,
+              permit,
               () {
                 _checkChatCapture(resolved.capture!, requireSamePath: resolved.requireSamePath);
                 final baseline = engine._stateAt(ref.chatId, ref.nodeId);
@@ -434,6 +454,7 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
         case TavernVariableScope.character:
           saved = await engine._libraryOperation(() async {
             final id = target.characterId!;
+            engine._authoringAuthority.checkWritable('character:$id');
             final record = await engine._library.read(id);
             if (record == null) {
               throw _scriptError(TavernScriptErrorCode.notFound, 'variables', 'Character not found.');
@@ -463,6 +484,7 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
           } else if (owner.kind == TavernScriptOwnerKind.character) {
             saved = await engine._libraryOperation(() async {
               final id = owner.assetId!;
+              engine._authoringAuthority.checkWritable('character:$id');
               final record = await engine._library.read(id);
               if (record == null) {
                 throw _scriptError(TavernScriptErrorCode.notFound, 'variables', 'Script character not found.');
@@ -517,7 +539,9 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
         nodeId: target.messageRef?.nodeId,
         committed: committed,
       );
-    } catch (error) {
+    } catch (error, stack) {
+      final reported = _scriptReportedFailure(error);
+      if (reported != null) Error.throwWithStackTrace(reported, stack);
       throw _scriptError(
         TavernScriptErrorCode.storage,
         'variables',
@@ -547,13 +571,19 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
     if (engine._deletingCharacters.contains(id)) {
       throw _scriptError(TavernScriptErrorCode.notFound, 'variables', 'Character deletion is running.');
     }
+    var committed = false;
     try {
-      final record = await engine._library.updateScriptStorage(id, extensions);
+      final record = await engine._library.updateScriptStorage(
+        id,
+        extensions,
+        onCommitted: () {
+          committed = true;
+        },
+      );
       engine._characterCache = null;
       engine._cacheCharacterDetail(id, Future.value(record));
-      engine._directors.characterChanged(id);
       engine._notifyLists();
-    } catch (error) {
+    } catch (error, stack) {
       // card.json can commit before its derived summary fails. Evict and read
       // the authoritative file; never publish the older cached character.
       engine._characterCache = null;
@@ -567,10 +597,8 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
       if (actual != null) {
         engine._cacheCharacterDetail(id, Future.value(actual));
       }
-      final committed = actual != null && _stateJsonEqual(_optionalObject(actual.card.data, 'extensions'), extensions);
-      if (committed) {
-        engine._directors.characterChanged(id);
-      }
+      final reported = _scriptReportedFailure(error);
+      if (reported != null) Error.throwWithStackTrace(reported, stack);
       throw _scriptError(
         TavernScriptErrorCode.storage,
         'variables',
@@ -588,13 +616,52 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
     await _readStoredVariable(TavernVariableTarget(scope: TavernVariableScope.script, scriptOwner: owner), (_) {});
   }
 
-  Future<_ScriptDataContext> _prepareDataContext(String chatId) async {
+  Future<_ScriptDataContext> _prepareDataContext(String chatId, {bool forceGameplay = false}) async {
+    final admittedChat = engine._store.chat(chatId);
+    final admission = _captureGameplayAdmission(
+      engine,
+      characterId: admittedChat.characterId,
+      chatId: chatId,
+      settings: const {},
+    );
+    final useGameplay = admission.hasActivePacks || forceGameplay;
+    final settings = useGameplay
+        ? engine._effectiveSettings(admittedChat, engine._chatCodec.metadataForNode(engine._store, chatId))
+        : null;
     while (true) {
       final chat = engine._store.chat(chatId);
       final revision = engine._directors._cardRevisions[chat.characterId] ?? 0;
       final record = await engine._record(chat.characterId);
       if (record == null) {
         throw _scriptError(TavernScriptErrorCode.notFound, 'data', 'The host character does not exist.');
+      }
+      if (chat.characterId != admission.hostCharacterId) {
+        throw _scriptError(TavernScriptErrorCode.revisionConflict, 'data', 'The captured host identity changed.');
+      }
+      if (revision != (engine._directors._cardRevisions[chat.characterId] ?? 0)) {
+        continue;
+      }
+      final _GameplayRuntime? gameplay;
+      if (useGameplay) {
+        try {
+          gameplay = await _prepareGameplayRuntime(
+            engine,
+            admission,
+            hostData: record.card.data,
+            force: forceGameplay,
+            settings: settings,
+          );
+        } on TavernGameplayException catch (error, stack) {
+          if (error.code != 'capture_conflict') {
+            rethrow;
+          }
+          Error.throwWithStackTrace(
+            _scriptError(TavernScriptErrorCode.revisionConflict, 'data', 'The captured gameplay bindings changed.'),
+            stack,
+          );
+        }
+      } else {
+        gameplay = null;
       }
       if (revision != (engine._directors._cardRevisions[chat.characterId] ?? 0)) {
         continue;
@@ -604,21 +671,37 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
         chat.characterId,
         revision,
         _copy(record.card.data),
-        _stateDefinition(record.card.data),
-        engine._effectiveSettings(chat, engine._chatCodec.metadataForNode(engine._store, chatId)),
+        gameplay?.state ?? _stateDefinition(record.card.data),
+        settings ?? engine._effectiveSettings(chat, engine._chatCodec.metadataForNode(engine._store, chatId)),
+        gameplay: gameplay,
+        gameplayAdmission: admission,
       );
     }
   }
 
-  Map<String, Object?> _initialMessageState(_ScriptDataContext dataContext) {
+  _ScriptPreparedData _initialMessageState(_ScriptDataContext dataContext) {
     _checkDataContext(dataContext);
     final chat = engine._store.chat(dataContext.chatId);
     final state = engine._store.groupChat(chat.id) == null
         ? _emptyChatState(engine._chatCodec.metadataForNode(engine._store, chat.id))
         : engine._store.groupInitialState(chat.id);
     state['variables'] = _copy(chat.variables);
-    _initializeDshState(dataContext.definition, state, dataContext.settings['stateEnabled'] != false);
-    return state;
+    final before = _StateInput(state);
+    _initializeDshState(
+      dataContext.definition,
+      state,
+      dataContext.settings['stateEnabled'] != false,
+      gameplay: dataContext.gameplay,
+    );
+    final adopted = !before.valueExists && _StateInput(state).valueExists ? dataContext.gameplay : null;
+    return _ScriptPreparedData(
+      state,
+      null,
+      null,
+      null,
+      adoptedGameplay: adopted,
+      gameplayAdmission: adopted == null ? null : dataContext.gameplayAdmission,
+    );
   }
 
   void _checkDataContext(_ScriptDataContext dataContext) {
@@ -627,6 +710,10 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
         engine._deletingCharacters.contains(dataContext.hostId) ||
         dataContext.hostRevision != (engine._directors._cardRevisions[dataContext.hostId] ?? 0)) {
       throw _scriptError(TavernScriptErrorCode.revisionConflict, 'data', 'The captured host definition changed.');
+    }
+    final admission = dataContext.gameplayAdmission;
+    if (admission != null && !_gameplayAdmissionCurrent(engine, admission)) {
+      throw _scriptError(TavernScriptErrorCode.revisionConflict, 'data', 'The captured gameplay bindings changed.');
     }
   }
 
@@ -638,95 +725,29 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
     Map<String, Object?> extra = const {},
   }) {
     _checkDataContext(context);
-    final requested = _captureScriptObject(data);
-    final old = baseline['messageVariables'];
-    final oldObject = old is Map<String, Object?> ? old : null;
-    final sameDshgo =
-        oldObject != null &&
-        oldObject.containsKey('dshgo') == requested.containsKey('dshgo') &&
-        _stateJsonEqual(oldObject['dshgo'], requested['dshgo']);
-    final next = _copy(baseline)..['messageVariables'] = requested;
-    if (!context.definition.hasSchema ||
-        sameDshgo ||
-        (oldObject == null && !baseline.containsKey('messageVariables') && !requested.containsKey('dshgo'))) {
-      return _ScriptPreparedData(next, null, null, null);
-    }
-    final input = _StateInput(baseline);
-    final invocation = _newStateId();
-    final issues = [...input.issues];
-    var receipts = <Map<String, Object?>>[];
-    var changes = <Map<String, Object?>>[];
-    var effects = <Map<String, Object?>>[];
-    var applied = false;
-    var changed = false;
-    Map<String, Object?> candidate = next;
-    if (input.writable) {
-      final session = context.definition.startSession(
-        valueExists: input.valueExists,
-        value: input.value,
-        runtimeExists: input.runtimeExists,
-        runtime: input.runtime,
-      );
-      final remove = !requested.containsKey('dshgo');
-      final operation = session.apply(
-        [
-          {'op': remove ? 'remove' : 'set', 'path': '', 'why': 'script', if (!remove) 'value': requested['dshgo']},
-        ],
-        actor: state_core.StateActor.user,
-        source: 'script',
-      );
-      final result = session.finish(runRules: operation.acceptedCount > 0);
-      receipts = result.receipts;
-      issues.addAll(result.issues);
-      applied = operation.acceptedCount == 1 && operation.rejectedCount == 0 && result.valid;
-      if (applied) {
-        changed = result.changed;
-        changes = result.changes;
-        effects = _identifiedEffects(result.effects, invocation);
-        candidate = _stateResultSnapshot(next, result, effects, const {});
-      }
-    }
-    final audit = _stateOwnAudit(invocation, changes, effects, issues);
-    final panel = _statePanel(
-      context.chatId,
-      nodeId,
-      applied ? candidate : baseline,
-      applied ? _stateNodeExtra(extra, candidate, audit) : extra,
-      context.definition,
-      context.settings,
-      protection: _SecretProtection(context.hostData, applied ? candidate : baseline),
+    return _prepareScriptMessageData(
+      context,
+      nodeId: nodeId,
+      baseline: baseline,
+      data: data,
+      extra: extra,
+      createInvocation: _newStateId,
     );
-    final stateEdit = TavernStateEditResult(
-      applied: applied,
-      changed: changed,
-      snapshot: panel,
-      receipts: receipts,
-      issues: issues,
-    );
-    if (!applied) {
-      throw _scriptError(
-        TavernScriptErrorCode.stateValidation,
-        'messageData',
-        'The complete message-variable replacement was rejected.',
-        nodeId: nodeId,
-        stateEdit: stateEdit,
-      );
+  }
+
+  void _ensurePreparedGameplay(_ScriptPreparedData prepared) {
+    if (prepared.adoptedGameplay == null) {
+      return;
     }
-    return _ScriptPreparedData(candidate, stateEdit, audit, {
-      'version': 1,
-      'invocationId': invocation,
-      'source': 'script',
-      'definitionFingerprint': context.definition.fingerprint,
-      'committed': true,
-      'changed': changed,
-      'receipts': receipts,
-      'changes': changes,
-      'effects': effects,
-      'issues': issues,
-    });
+    final admission = prepared.gameplayAdmission;
+    if (admission != null && !_gameplayAdmissionCurrent(engine, admission)) {
+      throw _scriptError(TavernScriptErrorCode.revisionConflict, 'data', 'The captured gameplay bindings changed.');
+    }
+    _ensureGameplayConfig(engine, prepared.adoptedGameplay);
   }
 
   void _commitMessageData(String chatId, String nodeId, _ScriptPreparedData prepared) {
+    _ensurePreparedGameplay(prepared);
     engine._store.writeNodeState(chatId, nodeId, prepared.state);
     final extra = engine._store.rawNodeExtra(chatId, nodeId);
     engine._store.updateMessage(
@@ -750,6 +771,127 @@ extension _ScriptVariableOperations on _ScriptCoordinator {
       );
     }
   }
+}
+
+/// Shared calculation only. The native wrapper still checks its live context
+/// and commits at its original boundary; an authoring caller adopts locally.
+_ScriptPreparedData _prepareScriptMessageData(
+  _ScriptDataContext context, {
+  required String? nodeId,
+  required Map<String, Object?> baseline,
+  required Map<String, Object?> data,
+  required Map<String, Object?> extra,
+  required String Function() createInvocation,
+}) {
+  final requested = _captureScriptObject(data);
+  final old = baseline['messageVariables'];
+  final oldObject = old is Map<String, Object?> ? old : null;
+  final sameDshgo =
+      oldObject != null &&
+      oldObject.containsKey('dshgo') == requested.containsKey('dshgo') &&
+      _stateJsonEqual(oldObject['dshgo'], requested['dshgo']);
+  final next = _copy(baseline)..['messageVariables'] = requested;
+  if (sameDshgo ||
+      (oldObject == null && !baseline.containsKey('messageVariables') && !requested.containsKey('dshgo'))) {
+    return _ScriptPreparedData(next, null, null, null);
+  }
+  final referenced = baseline.containsKey('dshgoPackDefinitionConfigId');
+  if (context.gameplay == null && referenced) {
+    throw _scriptError(
+      TavernScriptErrorCode.revisionConflict,
+      'messageData',
+      'The target acquired a gameplay interpretation after preparation.',
+      nodeId: nodeId,
+    );
+  }
+  if (!context.definition.hasSchema && context.gameplay == null) {
+    return _ScriptPreparedData(next, null, null, null);
+  }
+  final input = _StateInput(baseline);
+  final invocation = createInvocation();
+  final issues = [...input.issues];
+  var receipts = <Map<String, Object?>>[];
+  var changes = <Map<String, Object?>>[];
+  var effects = <Map<String, Object?>>[];
+  var applied = false;
+  var changed = false;
+  Map<String, Object?> candidate = next;
+  if (input.writable) {
+    final session = context.definition.startSession(
+      valueExists: input.valueExists,
+      value: input.value,
+      runtimeExists: input.runtimeExists,
+      runtime: input.runtime,
+      packRuntimeExists: input.packRuntimeExists,
+      packRuntime: input.packRuntime,
+    );
+    final remove = !requested.containsKey('dshgo');
+    final operation = session.apply(
+      [
+        {'op': remove ? 'remove' : 'set', 'path': '', 'why': 'script', if (!remove) 'value': requested['dshgo']},
+      ],
+      actor: state_core.StateActor.user,
+      source: 'script',
+    );
+    final result = session.finish(runRules: operation.acceptedCount > 0);
+    receipts = result.receipts;
+    issues.addAll(result.issues);
+    applied = operation.acceptedCount == 1 && operation.rejectedCount == 0 && result.valid;
+    if (applied) {
+      changed = result.changed;
+      changes = result.changes;
+      effects = _identifiedEffects(result.effects, invocation);
+      candidate = _stateResultSnapshot(next, result, effects, const {});
+      _stampGameplayConfig(context.gameplay, candidate);
+    }
+  }
+  final audit = _stateOwnAudit(invocation, changes, effects, issues);
+  final panel = _statePanel(
+    context.chatId,
+    nodeId,
+    applied ? candidate : baseline,
+    applied ? _stateNodeExtra(extra, candidate, audit) : extra,
+    context.definition,
+    context.settings,
+    dshgoOnly: context.gameplay != null || referenced,
+    allowInitialPreview: context.gameplay == null && !referenced,
+    protection: _SecretProtection(context.hostData, applied ? candidate : baseline, gameplay: context.gameplay),
+  );
+  final stateEdit = TavernStateEditResult(
+    applied: applied,
+    changed: changed,
+    snapshot: panel,
+    receipts: receipts,
+    issues: issues,
+  );
+  if (!applied) {
+    throw _scriptError(
+      TavernScriptErrorCode.stateValidation,
+      'messageData',
+      'The complete message-variable replacement was rejected.',
+      nodeId: nodeId,
+      stateEdit: stateEdit,
+    );
+  }
+  return _ScriptPreparedData(
+    candidate,
+    stateEdit,
+    audit,
+    {
+      'version': 1,
+      'invocationId': invocation,
+      'source': 'script',
+      'definitionFingerprint': context.definition.fingerprint,
+      'committed': true,
+      'changed': changed,
+      'receipts': receipts,
+      'changes': changes,
+      'effects': effects,
+      'issues': issues,
+    },
+    adoptedGameplay: context.gameplay,
+    gameplayAdmission: context.gameplayAdmission,
+  );
 }
 
 void _checkOwnerIdentity(TavernScriptOwner owner) {
@@ -899,6 +1041,28 @@ extension _ScriptVariableVersions on _ScriptCoordinator {
           target.scriptOwner!.kind == TavernScriptOwnerKind.character &&
           target.scriptOwner!.assetId == id) {
         _observeVariable(entry, () => _scriptData(_optionalObject(data, 'extensions'), target.scriptOwner!.scriptId));
+      }
+    }
+  }
+
+  void cardRemoved(String id) {
+    if (_closed) return;
+    _resourceVersion('characterData:$id', null, present: false);
+    _resourceVersion('embedded:$id', null, present: false);
+    for (final entry in _variableVersions.values) {
+      final target = entry.target;
+      if (target.scope == TavernVariableScope.character && target.characterId == id) {
+        _observeVariable(
+          entry,
+          () => throw _scriptError(TavernScriptErrorCode.notFound, 'variables', 'Character not found.'),
+        );
+      } else if (target.scope == TavernVariableScope.script &&
+          target.scriptOwner!.kind == TavernScriptOwnerKind.character &&
+          target.scriptOwner!.assetId == id) {
+        _observeVariable(
+          entry,
+          () => throw _scriptError(TavernScriptErrorCode.notFound, 'variables', 'Script character not found.'),
+        );
       }
     }
   }

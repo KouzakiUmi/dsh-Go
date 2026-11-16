@@ -5,15 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/l10n.dart';
 import '../../launch/launch_state.dart';
+import '../../launch/startup_trace.dart';
 import '../../runtime/local_footprint.dart';
 import '../../diagnostics/diagnostics_publish.dart';
+import '../../diagnostics/automatic_diagnostics.dart';
 import '../../runtime/runtime_bridge.dart';
 import '../../runtime/runtime_state.dart';
 import '../../share_code/guest_fs.dart';
+import '../../state/android_features.dart';
 import '../../state/engine_control.dart';
 import '../../state/hosts_state.dart';
 import '../../state/notify_state.dart';
+import '../../state/ohos_linux_state.dart';
 import '../../state/onboarding_state.dart';
 import '../../state/settings_state.dart';
 import '../../ui_config/ui_skill.dart';
@@ -249,7 +254,7 @@ class _RootGateState extends ConsumerState<RootGate> {
     final status = ref.read(localRuntimeProvider).status;
     // After repeated crashes with automatic safe mode off, the failure card
     // waits for the user instead of starting again.
-    if (status.phase == RuntimePhase.installed && EngineControl.shouldAutoStart(status)) {
+    if (EngineControl.startsAtLaunch(status)) {
       unawaited(ref.read(localRuntimeProvider.notifier).start());
     }
   }
@@ -279,6 +284,7 @@ class _RootGateState extends ConsumerState<RootGate> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(automaticDiagnosticsProvider);
     final settings = ref.watch(settingsProvider);
     final runtime = ref.watch(localRuntimeProvider.select((s) => (status: s.status, loaded: s.loaded)));
     final prefs = ref.watch(onboardingPrefsProvider);
@@ -317,6 +323,8 @@ class _RootGateState extends ConsumerState<RootGate> {
     ref.listen(localRuntimeProvider.select((s) => s.status.phase), (_, next) {
       if (next == RuntimePhase.running) {
         _publishDiagnostics();
+        // The engine forgets the Linux switch and proxy on every start.
+        if (ref.read(operatingSystemProvider) == 'ohos') unawaited(ref.read(ohosLinuxProvider.notifier).restore());
       } else {
         _publishedDiagnostics = false;
       }
@@ -325,6 +333,7 @@ class _RootGateState extends ConsumerState<RootGate> {
 
     final Widget child;
     if (!settings.loaded || !runtime.loaded || !prefs.loaded) {
+      StartupTrace.mark('waiting: settings ${settings.loaded}, engine ${runtime.loaded}, setup ${prefs.loaded}');
       child = const _Splash();
     } else {
       if (!_decided) {
@@ -371,9 +380,12 @@ class _RootGateState extends ConsumerState<RootGate> {
       // 启动画面: the first page is up. A warm start's launch screen goes now; a cold start of
       // this phone's engine finishes its motion first (or goes when the engine is up).
       _launchReady = true;
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => LaunchController.active.value?.ready(waitsForEngine: ref.read(activeHostProvider).isLocal),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        StartupTrace.mark('first page');
+        final launch = LaunchController.active.value;
+        if (launch == null) return StartupTrace.finished();
+        launch.ready(waitsForEngine: ref.read(activeHostProvider).isLocal);
+      });
     }
     return AnimatedSwitcher(
       duration: AppMotion.of(context, AppMotion.page),
@@ -394,6 +406,24 @@ class _Splash extends StatefulWidget {
 
   @override
   State<_Splash> createState() => _SplashState();
+}
+
+/// HarmonyOS finishes a reset as the app opens, before the first status: a
+/// reinstall can take a while under the mark.
+class _ResetFinishing extends ConsumerWidget {
+  const _ResetFinishing();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(operatingSystemProvider) != 'ohos' ||
+        ref.watch(localRuntimeProvider.select((s) => s.progress)) == null) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Text(context.l10n.harmonyResetFinishing, style: Theme.of(context).textTheme.bodySmall),
+    );
+  }
 }
 
 class _SplashState extends State<_Splash> {
@@ -423,7 +453,10 @@ class _SplashState extends State<_Splash> {
           child: AnimatedOpacity(
             opacity: _visible ? 1 : 0,
             duration: AppMotion.of(context, AppMotion.slow),
-            child: const BrandMark(size: 64, tile: true),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [BrandMark(size: 64, tile: true), _ResetFinishing()],
+            ),
           ),
         ),
       ),

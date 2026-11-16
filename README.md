@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  DeepSeek Harness 的 Android 客户端。手机上直接跑，也能遥控你电脑上的 DSH。
+  DeepSeek Harness 的手机应用：Android 版已发布；iOS 版仍在开发和真机测试，需在 Mac 上自行签名编译（<a href="app/ios/README.md">iOS 工程</a> · <a href="docs/architecture.md">架构</a>）。
 </p>
 
 <p align="center">
@@ -51,7 +51,7 @@
 </p>
 
 <p align="center">
-  <b>感谢大家对 DSH Go 的支持和喜爱，我将尽快适配 iOS 和鸿蒙！大家 Star 点得越多，我适配得越快哦 hhh</b>
+  <b>感谢大家对 DSH Go 的支持和喜爱！当前下载页提供 Android APK；iOS 版还在开发和真机测试，没有公开安装包，鸿蒙版也在继续推进。</b>
 </p>
 
 <p align="center">
@@ -300,15 +300,15 @@ DSH Go 上游不接受 PR。当前工作区提供基于上游的修改版 APK，
 
 | 路径 | 内容 |
 | --- | --- |
-| `app/` | Flutter 界面与 Android Kotlin 平台实现 |
+| `app/` | Flutter 界面、Android Kotlin 实现与开发中的 iOS Swift/WidgetKit 实现 |
 | `packages/dsh_client/` | DSH Web API 的 Dart 客户端 |
 | `packages/dsh_remote/` | DSH Remote 的 Dart 客户端 |
-| `runtime/` | Linux 运行时打包、引擎补丁与 App 桥接 |
+| `runtime/` | Android Linux 运行时、iOS 运行时特化、引擎补丁与 App 桥接 |
 | `sdk/plugin-kit/` | 原生插件作者工具包；在仓库中使用，未发布到 npm |
 | `examples/plugins/` | 插件示例 |
-| `docs/guide/`、`docs/plugins/` | 用户指南与插件开发文档 |
+| `docs/guide/`、`docs/plugins/`、`docs/pets/`、`docs/live2d/` | 用户指南、插件开发、宠物包与 Live2D 伙伴制作 |
 | `docs/assets/` | 本页用到的展示图、桌宠动图和社群二维码 |
-| `tooling/` | 工具链、APK 构建与诊断脚本 |
+| `tooling/` | 工具链、Android APK/iOS 开发构建与诊断脚本 |
 | `services/`、`site/`、`infra/` | 配套分享服务、网站和部署材料 |
 
 ## 参与贡献
@@ -324,7 +324,6 @@ DSH Go 上游不接受 PR。当前工作区提供基于上游的修改版 APK，
 - **论坛**：[forum.dshtui.com](https://forum.dshtui.com)
 - **QQ 群**：`1132118290`（[点此加群](https://qm.qq.com/q/OEy2RqZnqY)）
 - **微信群**：扫下方二维码，过期请加 QQ 群
-<!-- Telegram：链接待定，拿到后加一行 -->
 
 <p align="center">
   <a href="https://qm.qq.com/q/OEy2RqZnqY"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-qq-zh-dark.webp"><img src="docs/assets/qr-qq-zh-light.webp" width="300" alt="QQ 群 DSH-Go！！，群号 1132118290"></picture></a>&emsp;&emsp;<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/qr-wechat-zh-dark.webp"><img src="docs/assets/qr-wechat-zh-light.webp" width="300" alt="微信群 DSHGo 2群"></picture>
@@ -356,11 +355,11 @@ DSH Go 上游不接受 PR。当前工作区提供基于上游的修改版 APK，
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)：DSH Go 运行和连接的就是它。
 - [DSH-TUI](https://github.com/ccch1mneyyy/dsh-TUI)：吉祥物 Deepy 小鲸鱼和鲸娘来自这里。
 
-Phase 相关代码经作者许可使用。DeepSeek Harness、PiPilot、DS Bot、DSH Remote 及其他第三方组件、素材保留各自的许可证和署名。具体来源和条款见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+Phase 相关代码经作者授权按 MIT 许可使用。DeepSeek Harness、PiPilot、DS Bot、DSH Remote 及其他第三方组件、素材保留各自的许可证和署名。具体来源和条款见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 DSH Go 的名称、标识、Deepy 小鲸鱼和鲸娘等形象不在 AGPL 授权范围内，使用条款见 [ASSETS.md](ASSETS.md)。
 
-<sub>远程连接参考了 [ds-harness-remote](https://github.com/liguobao/ds-harness-remote) 的项目和服务器，感谢作者李国宝。</sub>
+<sub>远程连接协议与 [ds-harness-remote](https://github.com/liguobao/ds-harness-remote)（MIT）兼容；来源与条款见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。</sub>
 
 <br>
 

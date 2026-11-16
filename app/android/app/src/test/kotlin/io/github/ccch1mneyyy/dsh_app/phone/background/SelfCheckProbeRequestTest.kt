@@ -39,7 +39,7 @@ class SelfCheckProbeRequestTest {
     }
 
     @Test fun operationCannotBecomeAnotherPrivilegedCommand() {
-        for (value in listOf<Any?>(null, 1, Proto.OP_CREATE, Proto.OP_GATE, Proto.OP_RELEASE, "SelfCheckProbe"))
+        for (value in listOf<Any?>(null, 1, Proto.OP_CREATE, "gate", Proto.OP_RELEASE, "SelfCheckProbe"))
             assertNull(parse(request().apply { put(Proto.OP, value) }))
     }
 

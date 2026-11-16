@@ -239,57 +239,6 @@ enum PhoneBackgroundViewport {
   }
 }
 
-/// Physical cleanup of the original settings probe; this is not a new probe action.
-class PhoneGateCleanup {
-  const PhoneGateCleanup({required this.state, required this.canRetry, this.handle});
-  final String state;
-  final bool canRetry;
-  final String? handle;
-  bool get blocked => state != 'idle';
-
-  static PhoneGateCleanup? parse(Object? value) {
-    if (value is! Map || value['v'] is! int || value['v'] != 1 ||
-        value['canRetry'] is! bool ||
-        !const {'idle', 'pending', 'cleaning', 'unknown'}.contains(value['state'])) {
-      return null;
-    }
-    final state = value['state'] as String;
-    final handle = value['handle'];
-    if (state == 'idle') {
-      if (handle != null || value['canRetry'] != false) return null;
-      return const PhoneGateCleanup(state: 'idle', canRetry: false);
-    }
-    if (handle is! String || handle.isEmpty || handle.length > 128 ||
-        (state != 'unknown' && value['canRetry'] == true)) {
-      return null;
-    }
-    return PhoneGateCleanup(state: state, canRetry: value['canRetry'] as bool, handle: handle);
-  }
-}
-
-/// Physical-resource recovery is independent of acknowledging a logical task interruption.
-class PhoneResourceRecovery {
-  const PhoneResourceRecovery({required this.state, required this.count, required this.canRetry, this.reason});
-  final String state;
-  final int count;
-  final bool canRetry;
-  final String? reason;
-  bool get blocked => state != 'clear';
-
-  static PhoneResourceRecovery? parse(Object? value) {
-    if (value is! Map || value['v'] is! int || value['v'] != 1 ||
-        value['count'] is! int || (value['count'] as int) < 0 || (value['count'] as int) > 256 ||
-        value['canRetry'] is! bool ||
-        !const {'loading', 'clear', 'pending', 'error', 'recovering'}.contains(value['state']) ||
-        value['reason'] != null && value['reason'] is! String) {
-      return null;
-    }
-    if (value['state'] == 'recovering' && value['canRetry'] == true) return null;
-    return PhoneResourceRecovery(state: value['state'] as String, count: value['count'] as int,
-      canRetry: value['canRetry'] as bool, reason: value['reason'] as String?);
-  }
-}
-
 /// Native admission capacity, independent of the legacy global parallelLimit field.
 class BackgroundParallelism {
   const BackgroundParallelism._(this.configuredLimit, this.effectiveLimit, this.heldSlots, this.reason);
@@ -310,9 +259,8 @@ class BackgroundParallelism {
         held is! int || held < 0 || held > 3) {
       return null;
     }
-    if (reason != null && !const {
-      'off', 'unsupported', 'connectionRequired', 'busy', 'resourceRecovery', 'peerUnsupported', 'transportSerial',
-    }.contains(reason)) {
+    if (reason != null &&
+        !const {'off', 'unsupported', 'connectionRequired', 'busy', 'transportSerial'}.contains(reason)) {
       return null;
     }
     if (effective == 0 && reason == null) return null;
@@ -333,8 +281,6 @@ class PhoneBackgroundStatus {
     this.viewport,
     this.previewVersion,
     this.previewEnabled = false,
-    this.gateCleanup,
-    this.resourceRecovery,
     this.parallelism,
   });
 
@@ -350,8 +296,6 @@ class PhoneBackgroundStatus {
     viewport: PhoneBackgroundViewport.fromMap(_map(m['viewport'])),
     previewVersion: _int(_map(m['preview'])['v']),
     previewEnabled: _flag(_map(m['preview'])['enabled']),
-    gateCleanup: PhoneGateCleanup.parse(m['gateCleanup']),
-    resourceRecovery: PhoneResourceRecovery.parse(m['resourceRecovery']),
     parallelism: BackgroundParallelism.parse(m['parallelism']),
   );
 
@@ -372,8 +316,6 @@ class PhoneBackgroundStatus {
   final PhoneBackgroundViewport? viewport;
   final int? previewVersion;
   final bool previewEnabled;
-  final PhoneGateCleanup? gateCleanup;
-  final PhoneResourceRecovery? resourceRecovery;
   final BackgroundParallelism? parallelism;
 
   PhonePrivilegedMode get effectiveMode =>
@@ -436,6 +378,7 @@ class PhoneTaskStatus {
     this.interrupted,
     this.stopSource,
     this.waived = false,
+    this.ownerSessionId,
   });
 
   factory PhoneTaskStatus.fromMap(Map<Object?, Object?> m) => PhoneTaskStatus(
@@ -463,6 +406,7 @@ class PhoneTaskStatus {
     interrupted: m.containsKey('interrupted') ? _flag(m['interrupted']) : null,
     stopSource: m.containsKey('stopSource') ? (_text(m['stopSource']) ?? 'UNKNOWN') : null,
     waived: _flag(m['waived']),
+    ownerSessionId: _text(m['ownerSessionId']),
   );
 
   final String? sessionId;
@@ -507,6 +451,9 @@ class PhoneTaskStatus {
 
   /// 本任务免确认 was granted: the rest of this task asks nothing.
   final bool waived;
+
+  /// Explicit owner supplied by the authenticated iOS engine bridge.
+  final String? ownerSessionId;
 }
 
 List<PhoneTaskStatus> _phoneTasks(Map<Object?, Object?> m) => m['taskProtocol'] == 1 && m['tasks'] is List
@@ -769,15 +716,19 @@ class PhoneStatus {
 // ── 悬浮条 ───────────────────────────────────────────────────────────────────
 
 /// 设置 → 手机操控 → 悬浮条 (`overlayPrefs` / `setOverlayPrefs`): how opaque the
-/// pill is when idle, and whether it folds into the ball by itself. A showing
-/// overlay follows changes at once.
+/// ball is when idle, and whether an idle capsule folds into the ball by itself
+/// (on unless the person turned it off, as OverlayPrefs.kt). A showing overlay
+/// follows changes at once.
 class PhoneOverlayPrefs {
-  const PhoneOverlayPrefs({this.idleOpacity = defaultOpacity, this.autoCollapse = false});
+  const PhoneOverlayPrefs({this.idleOpacity = defaultOpacity, this.autoCollapse = defaultAutoCollapse});
 
   factory PhoneOverlayPrefs.fromMap(Map<Object?, Object?> m) => PhoneOverlayPrefs(
     idleOpacity: clampOpacity(m['idleOpacity'] is num ? (m['idleOpacity'] as num).toDouble() : defaultOpacity),
-    autoCollapse: _flag(m['autoCollapse']),
+    autoCollapse: _maybeFlag(m['autoCollapse']) ?? defaultAutoCollapse,
   );
+
+  /// On: the capsule shows what DSH starts doing, then gets out of the way.
+  static const defaultAutoCollapse = true;
 
   /// 70 %: the line reads over light and dark pages alike (see OverlayPrefs.kt).
   static const defaultOpacity = 0.7;
@@ -998,7 +949,8 @@ enum PhoneConfirmMode {
   /// 每次都询问: a new app, sending, deleting, paying… ask first.
   ask,
 
-  /// 本任务免确认: the first question of a task can waive the rest of it.
+  /// 本任务免确认 (本轮允许): the first question of a round can waive the
+  /// rest of it.
   task,
 
   /// 始终免确认: nothing is asked.
@@ -1008,14 +960,17 @@ enum PhoneConfirmMode {
   static PhoneConfirmMode parse(Object? wire) => values.firstWhere((m) => m.name == wire, orElse: () => ask);
 }
 
-/// `getPolicies` / `setPolicies`. Only the two lists and [confirmMode] go back
-/// over the wire; [labels] and the defaults are optional extras the native
-/// side may send. [unlocks] never rides along: it changes only through
-/// [PhoneChannel.setUnlock], so a stale copy can't lift or restore a rule.
+/// `getPolicies` / `setPolicies`. Only the two lists, 始终允许 and
+/// [confirmMode] go back over the wire; [labels] and the defaults are optional
+/// extras the native side may send. [unlocks] never rides along: it changes
+/// only through [PhoneChannel.setUnlock], so a stale copy can't lift or
+/// restore a rule.
 class PhonePolicies {
   const PhonePolicies({
     this.denyPackages = const [],
     this.confirmEveryWritePackages = const [],
+    this.alwaysAllowEnabled = false,
+    this.alwaysAllowPackages = const [],
     this.labels = const {},
     this.defaultDeny = const [],
     this.defaultConfirm = const [],
@@ -1030,6 +985,9 @@ class PhonePolicies {
     return PhonePolicies(
       denyPackages: _strings(m['denyPackages']),
       confirmEveryWritePackages: _strings(m['confirmEveryWritePackages']),
+      // Only an explicit true turns it on; a missing or malformed value is off.
+      alwaysAllowEnabled: m['alwaysAllowEnabled'] == true,
+      alwaysAllowPackages: _strings(m['alwaysAllowPackages']),
       labels: {
         for (final e in _map(m['labels']).entries)
           if (e.key is String && e.value is String) e.key as String: e.value as String,
@@ -1049,6 +1007,10 @@ class PhonePolicies {
   final List<String> denyPackages;
   final List<String> confirmEveryWritePackages;
 
+  /// 始终允许: send content to these apps without asking.
+  final bool alwaysAllowEnabled;
+  final List<String> alwaysAllowPackages;
+
   /// Package → app label, from the native side.
   final Map<String, String> labels;
 
@@ -1067,12 +1029,16 @@ class PhonePolicies {
   Map<String, Object?> toWire() => {
     'denyPackages': denyPackages,
     'confirmEveryWritePackages': confirmEveryWritePackages,
+    'alwaysAllowEnabled': alwaysAllowEnabled,
+    'alwaysAllowPackages': alwaysAllowPackages,
     'confirmMode': confirmMode.name,
   };
 
   PhonePolicies withConfirmMode(PhoneConfirmMode mode) => PhonePolicies(
     denyPackages: denyPackages,
     confirmEveryWritePackages: confirmEveryWritePackages,
+    alwaysAllowEnabled: alwaysAllowEnabled,
+    alwaysAllowPackages: alwaysAllowPackages,
     labels: labels,
     defaultDeny: defaultDeny,
     defaultConfirm: defaultConfirm,
@@ -1084,6 +1050,8 @@ class PhonePolicies {
   PhonePolicies withUnlock(PhoneUnlock unlock, bool on) => PhonePolicies(
     denyPackages: denyPackages,
     confirmEveryWritePackages: confirmEveryWritePackages,
+    alwaysAllowEnabled: alwaysAllowEnabled,
+    alwaysAllowPackages: alwaysAllowPackages,
     labels: labels,
     defaultDeny: defaultDeny,
     defaultConfirm: defaultConfirm,
@@ -1095,6 +1063,8 @@ class PhonePolicies {
   PhonePolicies withLocalOcrEnabled(bool? enabled) => PhonePolicies(
     denyPackages: denyPackages,
     confirmEveryWritePackages: confirmEveryWritePackages,
+    alwaysAllowEnabled: alwaysAllowEnabled,
+    alwaysAllowPackages: alwaysAllowPackages,
     labels: labels,
     defaultDeny: defaultDeny,
     defaultConfirm: defaultConfirm,
@@ -1135,6 +1105,8 @@ class PhonePolicies {
     return PhonePolicies(
       denyPackages: deny,
       confirmEveryWritePackages: confirm,
+      alwaysAllowEnabled: alwaysAllowEnabled,
+      alwaysAllowPackages: alwaysAllowPackages,
       labels: labels,
       defaultDeny: defaultDeny,
       defaultConfirm: defaultConfirm,
@@ -1143,6 +1115,20 @@ class PhonePolicies {
       localOcrEnabled: localOcrEnabled,
     );
   }
+
+  /// 始终允许: the switch and the app list, written together.
+  PhonePolicies withAlwaysAllow({required bool enabled, required List<String> packages}) => PhonePolicies(
+    denyPackages: denyPackages,
+    confirmEveryWritePackages: confirmEveryWritePackages,
+    alwaysAllowEnabled: enabled,
+    alwaysAllowPackages: packages,
+    labels: labels,
+    defaultDeny: defaultDeny,
+    defaultConfirm: defaultConfirm,
+    confirmMode: confirmMode,
+    unlocks: unlocks,
+    localOcrEnabled: localOcrEnabled,
+  );
 }
 
 // ── Action log ───────────────────────────────────────────────────────────────
@@ -1169,7 +1155,7 @@ enum PhoneDecision {
 
   /// Native vocabulary (PhoneCore / SafetyGate): `ok`, `allowed` (no question
   /// needed), `continue` (handoff resumed), `confirmed`, `confirmed-app`,
-  /// `confirmed-task` (本任务免确认 granted), `denied` (said no or 30 s without a choice), `stopped`, `paused`,
+  /// `denied` (said no or 30 s without a choice), `stopped`, `paused`,
   /// `refused:<rule>`, `unavailable`, `stale`, `timeout` (the tool ran out of
   /// time), `error`. Older or future words fall back to [unknown].
   static PhoneDecision parse(Object? wire) {
@@ -1458,11 +1444,6 @@ class PhoneChannel {
       return ScreenTestResult(ok: false, reason: e.message ?? e.code);
     }
   }
-
-  Future<PhoneResult> retryBackgroundRecovery() => _result('retryBackgroundRecovery');
-
-  Future<PhoneResult> retryBackgroundGateCleanup(String handle) =>
-      _result('retryBackgroundGateCleanup', {'v': 1, 'handle': handle});
 
   Future<PhoneResult> setBackgroundMode(PhoneBackgroundMode mode) => _result('setBackgroundMode', {'mode': mode.name});
 

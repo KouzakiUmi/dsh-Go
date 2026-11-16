@@ -1,4 +1,6 @@
-// Portions derived from PiPilot (https://github.com/CikeSeven/pi_pilot), MIT, Copyright (c) 2026 CikeSeven. See THIRD_PARTY_NOTICES.md.
+// SPDX-FileCopyrightText: 2026 CikeSeven
+// SPDX-License-Identifier: MIT
+// See THIRD_PARTY_NOTICES.md.
 // Local changes: rewritten around a centre-anchored CustomScrollView (see
 // [ChatList]); the jump-to-bottom control is a chrome-glass circle.
 
@@ -16,6 +18,7 @@ import '../../l10n/l10n.dart';
 import '../../pets/pet_signals.dart' show petHeadroomProvider;
 import '../../plugins/native/native_surface.dart' show nativeTurnNoteProvider;
 import '../../state/agents_state.dart' show hostSessionsProvider, selectConversation;
+import '../../state/app_notes.dart';
 import '../../state/artifacts.dart';
 import '../../state/attachments.dart' show DraftAttachment;
 import '../../state/chat_reveal.dart';
@@ -97,9 +100,13 @@ class ChatList extends ConsumerStatefulWidget {
     this.onQuote,
     this.onToast,
     this.onSwitchModel,
+    this.toTop,
   });
 
   final String sessionId;
+
+  /// Where the status bar's tap arrives (iOS).
+  final StatusBarTop? toTop;
 
   /// 顶栏占的高度(含状态栏)。
   final double topInset;
@@ -256,6 +263,35 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     _glide.start();
   }
 
+  void _goToTop() => unawaited(_runToTop());
+
+  /// The rows above are measured as they come into view, so the top can turn out nearer or further
+  /// than it first looked: stop on arriving, and go on if it's further. A finger takes over.
+  Future<void> _runToTop() async {
+    if (!_scroll.hasClients) return;
+    _stopGlide();
+    _pinned = false;
+    final position = _scroll.position;
+    final duration = AppMotion.of(context, const Duration(milliseconds: 600));
+    void stopAtTop() {
+      if (position.pixels < position.minScrollExtent) position.jumpTo(position.minScrollExtent);
+    }
+
+    _scroll.addListener(stopAtTop);
+    for (
+      var tries = 0;
+      tries < 3 && mounted && _fingers == 0 && position.pixels > position.minScrollExtent + 1;
+      tries++
+    ) {
+      if (duration == Duration.zero) {
+        position.jumpTo(position.minScrollExtent);
+      } else {
+        await position.animateTo(position.minScrollExtent, duration: duration, curve: AppMotion.glide);
+      }
+    }
+    if (mounted) _scroll.removeListener(stopAtTop);
+  }
+
   void _stopGlide() {
     _gliding = false;
     if (_glide.isActive) _glide.stop();
@@ -359,7 +395,14 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
       ref.read(chatProvider(widget.sessionId).notifier).rejectQuestion(request);
 
   @override
+  void initState() {
+    super.initState();
+    widget.toTop?.onTap = _goToTop;
+  }
+
+  @override
   void dispose() {
+    if (widget.toTop?.onTap == _goToTop) widget.toTop?.onTap = null;
     // This conversation's calls leave the tool summary caches with it.
     forgetToolSummaries({
       for (final item in _builtState?.items ?? const <ChatItem>[])
@@ -375,6 +418,10 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
   @override
   void didUpdateWidget(ChatList oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.toTop != widget.toTop) {
+      if (oldWidget.toTop?.onTap == _goToTop) oldWidget.toTop?.onTap = null;
+      widget.toTop?.onTap = _goToTop;
+    }
     if (oldWidget.bottomInset != widget.bottomInset && _pinned) _follow();
     // Rows call the callbacks through `widget` when tapped; only whether
     // each is there shapes what they show.
@@ -1115,7 +1162,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     };
     final canAct = prompt.inboxId != null;
     return UserBubble(
-      text: prompt.text,
+      text: withoutAppNotes(prompt.text),
       attachments: prompt.attachments.isEmpty ? null : SentAttachments.pending(prompt.attachments),
       pendingLabel: prompt.failed ? appL10n.chatFailedSubmission : label,
       pendingIcon: prompt.failed ? AppIcons.error : icon,
@@ -1139,7 +1186,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     final connection = ref.listenManual(activeConnectionProvider.select((c) => c.value?.client), (_, next) {
       if (!identical(next, client)) retired = true;
     });
-    var text = prompt.text;
+    var text = withoutAppNotes(prompt.text);
     try {
       final edited = await showAppDialog<String>(
         context: context,
@@ -1151,7 +1198,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextFormField(
-                  initialValue: prompt.text,
+                  initialValue: text,
                   onChanged: (value) => text = value,
                   autofocus: true,
                   minLines: 2,
@@ -1176,7 +1223,9 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
           client?.mux.lastReadyGenerationNumber != readyNumber) {
         return;
       }
-      await ref.read(chatProvider(sessionId).notifier).retryFailed(prompt, edited);
+      // Emptied: as before, nothing to send (the notes alone are not a message).
+      final retry = edited.trim().isEmpty ? edited : withAppNotesOf(prompt.text, edited);
+      await ref.read(chatProvider(sessionId).notifier).retryFailed(prompt, retry);
     } finally {
       connection.close();
     }
@@ -1303,7 +1352,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     if (outcome == null || !mounted) return;
     final attached = item.images.isNotEmpty || item.files.isNotEmpty;
     _openFork(outcome, messenger, attached ? appL10n.chatOpenedInNewChatReattach : appL10n.chatOpenedInNewChat);
-    compose?.call(item.text);
+    compose?.call(withoutAppNotes(item.text));
   }
 
   /// Switches to the fork; the toast offers the way back.
@@ -1357,7 +1406,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
       return null;
     }
     if (refused) {
-      if (code == 'CLIENT_UPGRADE_REQUIRED' && ref.read(activeHostProvider).kind == HostKind.local) {
+      if (code == 'CLIENT_UPGRADE_REQUIRED' && !wordsForIos && ref.read(activeHostProvider).kind == HostKind.local) {
         return (label: appL10n.updateCheck, onPressed: () => checkForUpdates(context, ref));
       }
       return widget.onSwitchModel == null ? null : (label: appL10n.chatSwitchModel, onPressed: _switchModel);
@@ -1399,7 +1448,7 @@ class _ChatListState extends ConsumerState<ChatList> with SingleTickerProviderSt
     return switch (row) {
       UserRow(:final item) when dshUiReplyChip(item.text) != null => DshUiReplyChip(label: dshUiReplyChip(item.text)!),
       UserRow(:final item) => UserBubble(
-        text: item.text,
+        text: withoutAppNotes(item.text),
         attachments: item.images.isEmpty && item.files.isEmpty
             ? null
             : SentAttachments.echoed(sessionId: widget.sessionId, images: item.images, files: item.files),
@@ -1736,4 +1785,16 @@ class _TopBoundedScrollPosition extends ScrollPositionWithSingleContext {
     }
     return super.applyContentDimensions(minScrollExtent, maxScrollExtent);
   }
+}
+
+/// A tap on iOS's status bar: the framework's Scaffold asks the nearest primary scroll controller to
+/// go to 0, and this one hands that to the conversation, whose list has its own top.
+class StatusBarTop extends ScrollController {
+  VoidCallback? onTap;
+
+  @override
+  bool get hasClients => true;
+
+  @override
+  Future<void> animateTo(double offset, {required Duration duration, required Curve curve}) async => onTap?.call();
 }

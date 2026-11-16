@@ -6,7 +6,7 @@ DSH Go 的源码以 AGPL-3.0 发布（见 [LICENSE](LICENSE)），但下面这�
 
 | 素材 | 位置 | 来源 |
 |---|---|---|
-| DSH Go 品牌标识（鱼尾与气泡） | `app/assets/brand/`；由它生成的 `app/lib/ui/shell/brand_glyph.g.dart`、启动图标 `app/android/app/src/main/res/mipmap-*/`、`drawable/ic_launcher_*` | DSH Go 自己的品牌图形 |
+| DSH Go 品牌标识（鱼尾与气泡） | `app/assets/brand/`；由它生成的 `app/lib/ui/shell/brand_glyph.g.dart`、启动图标 `app/android/app/src/main/res/mipmap-*/`、`drawable/ic_launcher_*`，鸿蒙的 `app/ohos/AppScope/resources/base/media/`、`app/ohos/entry/src/main/resources/base/media/`（`tooling/ohos/make-launcher-icons.py`） | DSH Go 自己的品牌图形 |
 | Deepy 小鲸鱼（像素鲸鱼桌宠） | 源文件 `app/tool/pet_src/deepy-whale/`；宠物包 `app/assets/pets/deepy-whale/` | DSH-TUI 的吉祥物。源文件按 [Clawd on Desk](https://github.com/rullerzhou-afk/clawd-on-desk) 的主题包格式制作，只沿用了它的格式 |
 | 鲸娘（像素鲸鱼娘表情） | 源文件 `app/tool/pet_src/whale-girl/`（`index.html` 是 https://dshtui.com/pets/whale-girl-emoji/ 原页面，里面有事件对应关系和逐帧时长）；宠物包 `app/assets/pets/whale-girl/`；求 Star 弹窗的贴纸 `app/assets/star/star_whale.webp` | DSH-TUI 的吉祥物，最初发布在 dshtui.com |
 
@@ -23,3 +23,17 @@ go.dshtui.com 首页（`site/home/`）由社区开发者 ClayGao233 / 采云师�
 伙伴小屋的 Live2D 素材不在这个仓库和 APK 里：Cubism Core（Live2D 专有许可）、Cubism Web Framework（Live2D Open Software License）和角色模型都打成单独的素材包，用时才放进手机，见 [docs/design/companion.md](docs/design/companion.md)。模型的作者和授权写在素材包的 `character.json` 里，App 菜单底部原样显示。
 
 第三方的代码、字体、图标和运行时组件见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 端上语音模型
+
+语音通话的判停模型放在 `app/android/app/src/main/assets/speech/`，随 APK 打包，按各自的许可证使用，不受上面的品牌素材限制。
+要重新下载并校验，运行 `python3 app/tool/fetch_speech_models.py`。
+
+| 文件 / 版本 | 固定来源 | SHA256 | 许可 |
+|---|---|---|---|
+| `silero_vad.onnx` / Silero VAD v6.2 | [snakers4/silero-vad, be95df9](https://raw.githubusercontent.com/snakers4/silero-vad/be95df9152c0d7618fa1edfeb296fc3dae32376f/src/silero_vad/data/silero_vad.onnx) | `1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3` | MIT；同目录 `silero-LICENSE.txt` |
+| `smart-turn-v3.2-cpu.onnx` / smart-turn v3.2 int8 | [pipecat-ai/smart-turn-v3, f766f81](https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/f766f81d3cfdf7737ac64aad813d91bbfd56bf93/smart-turn-v3.2-cpu.onnx) | `2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f` | BSD-2-Clause；同目录 `smart-turn-LICENSE.txt` |
+
+前端按 [smart-turn 的官方推理示例](https://github.com/pipecat-ai/smart-turn/blob/main/inference.py)
+使用 Whisper 8 秒特征，含补齐后的波形标准化 `do_normalize=True`。
+Android / JVM 的 ONNX Runtime 均固定 1.27.0（MIT）。

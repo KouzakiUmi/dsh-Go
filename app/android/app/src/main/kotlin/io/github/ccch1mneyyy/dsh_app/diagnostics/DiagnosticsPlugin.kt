@@ -9,7 +9,6 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.github.ccch1mneyyy.dsh_app.voice.VoiceDiagnostics
-import io.github.ccch1mneyyy.dsh_app.phone.PhoneControl
 import io.github.ccch1mneyyy.dsh_app.runtime.RuntimeManifest
 import io.github.ccch1mneyyy.dsh_app.update.ApkInstaller
 import org.json.JSONObject
@@ -28,6 +27,11 @@ import kotlin.concurrent.thread
  * - `engineLog {maxBytes}` → the last lines of the engine's log file (`dsh.log`, and the
  *   rotated `dsh.log.1` before it), which outlives the app process. Lines were already
  *   masked when written (`CrashClassifier.redact`); Dart masks them again.
+ *
+ * - `info.evidence` contains bounded persisted app errors/voice stages and this app's
+ *   system exit metadata, with per-source availability. No exception bodies or exit traces.
+ * - `recordAppError` / `recordVoiceStage` validate fixed fields and acknowledge after
+ *   background durable storage; invalid_evidence / evidence_unavailable do not affect app handlers.
  *
  * System IME capture returns only allowlisted events; raw lines are confined to the
  * privileged parser and are never returned, persisted or sent to the engine log.
@@ -58,7 +62,9 @@ class DiagnosticsPlugin : FlutterPlugin, io.flutter.embedding.engine.plugins.act
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "info" -> background(result) { mapOf("app" to app(), "device" to device(), "manifest" to manifest(), "voice" to VoiceDiagnostics.snapshot(context)) }
+            "info" -> background(result) { mapOf("app" to app(), "device" to device(), "manifest" to manifest(), "voice" to VoiceDiagnostics.snapshot(context), "evidence" to DiagnosticsEvidence.snapshot(context)) }
+            "recordAppError" -> DiagnosticsEvidence.record(context, "appErrors", call.arguments, result)
+            "recordVoiceStage" -> DiagnosticsEvidence.record(context, "voiceStages", call.arguments, result)
             "collectSystemIme" -> systemIme.collect(result)
             "cancelSystemIme" -> { systemIme.cancel(); result.success(null) }
             "engineLog" -> {
@@ -95,10 +101,6 @@ class DiagnosticsPlugin : FlutterPlugin, io.flutter.embedding.engine.plugins.act
         val memory = ActivityManager.MemoryInfo()
         runCatching { (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory) }
         return mapOf(
-            // Existing Dart device maps reach summary.json unchanged. These are the last accepted
-            // probe facts in this process, not a live self-test or a hardware capability promise.
-            "backgroundInputProbe" to (PhoneControl.peek()?.backgroundProbeDiagnostics()
-                ?: mapOf("v" to 1, "observed" to false, "connectionFailure" to false)),
             "manufacturer" to Build.MANUFACTURER,
             "brand" to Build.BRAND,
             "model" to Build.MODEL,

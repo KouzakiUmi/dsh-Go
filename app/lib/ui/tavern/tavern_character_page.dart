@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
 import '../../tavern/tavern_provider.dart';
+import '../../tavern/tavern_settings.dart';
 import '../bots/bot_format.dart' show shortTime;
 import '../chat/render/markdown_body.dart';
 import '../common/app_sheet.dart';
@@ -22,6 +23,9 @@ import '../theme/theme.dart';
 import 'tavern_character_edit_page.dart';
 import 'tavern_chat_files.dart';
 import 'tavern_chat_page.dart';
+import 'tavern_drafts_page.dart';
+import 'tavern_pack_bindings_page.dart';
+import 'tavern_pack_export_page.dart';
 import 'tavern_home_page.dart' show plainPreview;
 import 'tavern_live2d_tile.dart';
 import 'tavern_lorebooks_page.dart';
@@ -275,6 +279,57 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
                   note: l10n.tavernLorebookCharacterNote,
                 ),
                 TavernLive2dTile(character: character),
+                // A copy to change with the AI, applied when chosen.
+                SettingsTile(
+                  key: const ValueKey('tavern-character-drafts'),
+                  icon: AppIcons.askAi,
+                  tinted: false,
+                  title: l10n.tavernDraftsForCard,
+                  subtitle: l10n.tavernDraftsForCardSubtitle,
+                  onTap: () => Navigator.of(context).push(TavernDraftsPage.route(characterId: character.id)),
+                ),
+                // The 玩法包 every chat of this card uses.
+                SettingsTile(
+                  key: const ValueKey('tavern-character-packs'),
+                  icon: AppIcons.zip,
+                  tinted: false,
+                  title: l10n.tavernPacks,
+                  subtitle: l10n.tavernPackForCardSubtitle,
+                  onTap: () => Navigator.of(context).push(
+                    TavernPackBindingsPage.route((
+                      kind: TavernGameplayScope.character,
+                      targetId: character.id,
+                    ), characterId: character.id),
+                  ),
+                ),
+                // How its chats show the card: its own, or as 酒馆设置 say.
+                ...switch (ref.watch(tavernCharacterRenderProvider(character.id))) {
+                  final own => [
+                    SettingsSegmentTile<TavernRender>(
+                      key: const ValueKey('tavern-character-render'),
+                      title: l10n.tavernRender,
+                      subtitle: l10n.tavernRenderSubtitle,
+                      tinted: false,
+                      segments: [
+                        PillSegment(TavernRender.text, l10n.tavernRenderText),
+                        PillSegment(TavernRender.islands, l10n.tavernRenderIslands),
+                        PillSegment(TavernRender.canvas, l10n.tavernRenderCanvas),
+                      ],
+                      selected: own ?? tavernRenderOf(ref.watch(tavernSettingsProvider)),
+                      onChanged: (r) =>
+                          unawaited(ref.read(tavernCharacterRenderProvider(character.id).notifier).set(r)),
+                    ),
+                    if (own != null)
+                      SettingsTile(
+                        key: const ValueKey('tavern-character-render-follow'),
+                        icon: AppIcons.restart,
+                        tinted: false,
+                        title: l10n.tavernFollowSettings,
+                        onTap: () =>
+                            unawaited(ref.read(tavernCharacterRenderProvider(character.id).notifier).set(null)),
+                      ),
+                  ],
+                },
                 // What of the card runs here, and what is kept but not run.
                 SettingsTile(
                   key: const ValueKey('tavern-character-report'),
@@ -327,58 +382,72 @@ class _TavernCharacterPageState extends ConsumerState<TavernCharacterPage> {
 
   Future<void> _showMore(TavernCharacter character) => showAppSheet<void>(
     context,
+    isScrollControlled: true,
     builder: (sheet) => SafeArea(
       top: false,
-      child: SheetGroup(
-        margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-        children: [
-          SettingsTile(
-            key: const ValueKey('tavern-export-png'),
-            icon: AppIcons.share,
-            tinted: false,
-            title: context.l10n.tavernExportPng,
-            subtitle: context.l10n.tavernExportPngSubtitle,
-            chevron: false,
-            onTap: () {
-              Navigator.of(sheet).pop();
-              unawaited(shareTavernCard(context, ref, character, TavernCardFormat.png));
-            },
-          ),
-          SettingsTile(
-            key: const ValueKey('tavern-export-json'),
-            icon: AppIcons.shareFile,
-            tinted: false,
-            title: context.l10n.tavernExportJson,
-            chevron: false,
-            onTap: () {
-              Navigator.of(sheet).pop();
-              unawaited(shareTavernCard(context, ref, character, TavernCardFormat.json));
-            },
-          ),
-          SettingsTile(
-            key: const ValueKey('tavern-import-chats'),
-            icon: AppIcons.download,
-            tinted: false,
-            title: context.l10n.tavernImportChats,
-            subtitle: context.l10n.tavernImportChatsSubtitle,
-            chevron: false,
-            onTap: () {
-              Navigator.of(sheet).pop();
-              unawaited(importTavernChats(context, ref, character.id));
-            },
-          ),
-          SettingsTile(
-            icon: AppIcons.delete,
-            danger: true,
-            tinted: false,
-            chevron: false,
-            title: context.l10n.tavernDeleteCharacter,
-            onTap: () {
-              Navigator.of(sheet).pop();
-              unawaited(_delete(character));
-            },
-          ),
-        ],
+      child: SingleChildScrollView(
+        child: SheetGroup(
+          margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          children: [
+            SettingsTile(
+              key: const ValueKey('tavern-export-png'),
+              icon: AppIcons.share,
+              tinted: false,
+              title: context.l10n.tavernExportPng,
+              subtitle: context.l10n.tavernExportPngSubtitle,
+              chevron: false,
+              onTap: () {
+                Navigator.of(sheet).pop();
+                unawaited(shareTavernCard(context, ref, character, TavernCardFormat.png));
+              },
+            ),
+            SettingsTile(
+              key: const ValueKey('tavern-export-json'),
+              icon: AppIcons.shareFile,
+              tinted: false,
+              title: context.l10n.tavernExportJson,
+              chevron: false,
+              onTap: () {
+                Navigator.of(sheet).pop();
+                unawaited(shareTavernCard(context, ref, character, TavernCardFormat.json));
+              },
+            ),
+            SettingsTile(
+              key: const ValueKey('tavern-export-packs'),
+              icon: AppIcons.zip,
+              tinted: false,
+              title: context.l10n.tavernPackCardExport,
+              chevron: false,
+              onTap: () {
+                Navigator.of(sheet).pop();
+                unawaited(Navigator.of(context).push(TavernPackCardExportPage.route(character)));
+              },
+            ),
+            SettingsTile(
+              key: const ValueKey('tavern-import-chats'),
+              icon: AppIcons.download,
+              tinted: false,
+              title: context.l10n.tavernImportChats,
+              subtitle: context.l10n.tavernImportChatsSubtitle,
+              chevron: false,
+              onTap: () {
+                Navigator.of(sheet).pop();
+                unawaited(importTavernChats(context, ref, character.id));
+              },
+            ),
+            SettingsTile(
+              icon: AppIcons.delete,
+              danger: true,
+              tinted: false,
+              chevron: false,
+              title: context.l10n.tavernDeleteCharacter,
+              onTap: () {
+                Navigator.of(sheet).pop();
+                unawaited(_delete(character));
+              },
+            ),
+          ],
+        ),
       ),
     ),
   );

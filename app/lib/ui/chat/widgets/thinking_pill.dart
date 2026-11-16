@@ -1,4 +1,6 @@
-// Portions derived from PiPilot (https://github.com/CikeSeven/pi_pilot), MIT, Copyright (c) 2026 CikeSeven. See THIRD_PARTY_NOTICES.md.
+// SPDX-FileCopyrightText: 2026 CikeSeven
+// SPDX-License-Identifier: MIT
+// See THIRD_PARTY_NOTICES.md.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -16,6 +18,7 @@ import '../../common/pressable.dart';
 import '../../common/smooth_size.dart';
 import '../../common/think_glyph.dart';
 import '../../engine_settings/engine_settings_page.dart' show openSettingsPage;
+import '../../fx/orbs/thinking_orb.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/theme.dart';
 import '../render/markdown_body.dart';
@@ -144,15 +147,16 @@ class _ThinkingPillState extends State<ThinkingPill> {
               shape: Squircle.border(StreamRow.lead * 0.32),
             ),
             child: Center(
-              // 自己一层:转动只重绘这个图形,不重绘整行。
-              child: RepaintBoundary(
-                child: ThinkGlyph(size: 15, color: brand, spinning: active),
-              ),
+              // 思考中是一颗慢慢变形的点阵小光球(Libraries.dev 思考光球),想完换回静止的图形
+              // (和标签一样直接换,不叠着淡入淡出)。
+              child: active
+                  ? ThinkingOrb(state: OrbState.breathing, size: OrbSize.px20, displaySize: 18, ink: OrbInk.tint(brand))
+                  : ThinkGlyph(size: 15, color: brand),
             ),
           ),
         ),
         const SizedBox(width: StreamRow.gap),
-        // 标签直接换字,不做淡入淡出:两个词叠在同一个位置上闪一下更难看。
+        // 标签直接换字,不做淡入淡出:两个词叠在同一个位置上闪一下更乱。
         ThinkingLabel(active ? l10n.chatThinkingActive : l10n.chatThinking, active: active),
         ?widget.meta,
         if (preview.isNotEmpty) ...[

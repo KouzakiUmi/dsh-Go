@@ -1,11 +1,16 @@
-// Portions derived from PiPilot (https://github.com/CikeSeven/pi_pilot), MIT, Copyright (c) 2026 CikeSeven. See THIRD_PARTY_NOTICES.md.
+// SPDX-FileCopyrightText: 2026 CikeSeven
+// SPDX-License-Identifier: MIT
+// See THIRD_PARTY_NOTICES.md.
 
 import 'dart:async';
 
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/l10n.dart';
+import '../../../speech/read_aloud.dart';
+import '../../speech/speech_ui.dart';
 import '../../common/expand_reveal.dart';
 import '../../common/fluid_bits.dart';
 import '../../common/typing_indicator.dart';
@@ -19,7 +24,7 @@ import 'message_actions.dart';
 import 'stream_row.dart';
 import 'thinking_pill.dart';
 
-/// 三个点交给下一块内容:旧的线性淡出,新的淡入并上移一点(Grok 公开的数值)。
+/// 三个点交给下一块内容:旧的线性淡出,新的淡入并上移一点。
 const _handOffOut = Duration(milliseconds: 90);
 const _handOffIn = AppMotion.quick;
 const _handOffCurve = Cubic(0.23, 1, 0.32, 1);
@@ -28,7 +33,7 @@ const _handOffRise = 3.0;
 /// 思考之后的第一段正文淡入。
 const _firstTextIn = Duration(milliseconds: 200);
 
-/// 助手消息:**无框裸排的全宽正文**(Claude 式),没有头像也没有署名。
+/// 助手消息:**无框裸排的全宽正文**,没有头像也没有署名。
 ///
 /// ```
 /// (思考过程 ⌄)
@@ -40,7 +45,7 @@ const _firstTextIn = Duration(milliseconds: 200);
 ///
 /// ⇪ 和菜单里的「分享」打开同一个分享面板。长按或 ⋯:同一个消息菜单(复制 /
 /// 选择文字 / 引用 / 分享 / 重新回答 / 从这里分叉)。正文因此不再直接长按选字,选字走菜单里的
-/// "选择文字",选中一段还能「引用」(Claude 式)。
+/// "选择文字",选中一段还能「引用」。
 class AssistantMessage extends StatefulWidget {
   const AssistantMessage({
     super.key,
@@ -204,17 +209,21 @@ class _AssistantMessageState extends State<AssistantMessage> {
             duration: AppMotion.standard,
             curve: AppMotion.std,
             child: actions
-                ? ReplyActionRow(
-                    // Copy / share carry a one-line summary of each visual
-                    // reply, never its raw JSON.
-                    text: () => dshUiPlainText(text),
-                    onBranch: widget.onBranch,
-                    branching: widget.branching,
-                    onShare: () => shareReply(context, widget.item),
-                    onRegenerate: widget.onRegenerate,
-                    regenerating: widget.regenerating,
-                    onMore: () => _menu(text),
-                    trailing: widget.footnote,
+                ? Consumer(
+                    builder: (context, ref, _) => ReplyActionRow(
+                      // Copy / share carry a one-line summary of each visual
+                      // reply, never its raw JSON.
+                      text: () => dshUiPlainText(text),
+                      onBranch: widget.onBranch,
+                      branching: widget.branching,
+                      onShare: () => shareReply(context, widget.item),
+                      onReadAloud: () => readAloudReply(context, widget.item.key, dshUiPlainText(text)),
+                      reading: ref.watch(readAloudProvider.select((s) => s.phaseOf(widget.item.key))),
+                      onRegenerate: widget.onRegenerate,
+                      regenerating: widget.regenerating,
+                      onMore: () => _menu(text),
+                      trailing: widget.footnote,
+                    ),
                   )
                 : const SizedBox.shrink(),
           ),
@@ -241,6 +250,7 @@ class _AssistantMessageState extends State<AssistantMessage> {
         MessageAction.selectText,
         if (onQuote != null) MessageAction.quote,
         MessageAction.share,
+        MessageAction.readAloud,
         if (onRegenerate != null && !widget.regenerating) MessageAction.regenerate,
         if (onBranch != null && !widget.branching) MessageAction.branch,
       ],
@@ -255,6 +265,8 @@ class _AssistantMessageState extends State<AssistantMessage> {
         onQuote?.call(text);
       case MessageAction.share:
         await shareReply(context, widget.item);
+      case MessageAction.readAloud:
+        readAloudReply(context, widget.item.key, text);
       case MessageAction.regenerate:
         onRegenerate?.call();
       case MessageAction.branch:

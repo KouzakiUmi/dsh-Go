@@ -1,4 +1,6 @@
-// Portions derived from Phase (https://github.com/CikeSeven/phase), used with the author's permission. See THIRD_PARTY_NOTICES.md.
+// SPDX-FileCopyrightText: 2026 CikeSeven
+// SPDX-License-Identifier: MIT
+// See THIRD_PARTY_NOTICES.md.
 // Shizuku binding, permission and status, through the Shizuku API (dev.rikka.shizuku).
 package io.github.ccch1mneyyy.dsh_app.phone.background
 
@@ -209,7 +211,7 @@ class ShizukuStarter(
             failureStage = "muxFailed"
             val peer = MuxProtocol.peer(probe)
             peer?.let { MuxProtocol.acknowledge(remote.execute(MuxProtocol.optIn(it)), it) }
-            val candidate = ShizukuChannel(remote, peer, backgroundRequestLimit(probe::get, probe::containsKey, peer != null))
+            val candidate = ShizukuChannel(remote, peer, backgroundRequestLimit(probe.get(Proto.OK), peer != null))
             return synchronized(guard) {
                 if (!owner.valid || !owner.mayStart()) { candidate.close(); return connectFailed("cancelled") }
                 connectReasonCode = null

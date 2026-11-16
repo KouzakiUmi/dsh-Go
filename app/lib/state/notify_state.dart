@@ -14,6 +14,7 @@ import '../phone/phone_approval.dart';
 import '../companion/companion_state.dart';
 import '../pets/pet_signals.dart' show petHearAlert, petOnScreenProvider, petEventBusProvider;
 import 'app_info.dart';
+import 'android_features.dart';
 import 'bots_state.dart';
 import 'chat_state.dart';
 import 'connection_state.dart';
@@ -182,9 +183,22 @@ final launchNoticeShownProvider = NotifierProvider<FlagController, bool>(() => F
 /// A conversation on a host.
 typedef ChatTarget = ({HostRef host, String sessionId});
 
-/// The conversation the person is looking at right now, or null.
+/// The conversation a voice call is having, while the call is up.
+final callChatProvider = NotifierProvider<CallChat, ChatTarget?>(CallChat.new);
+
+class CallChat extends Notifier<ChatTarget?> {
+  @override
+  ChatTarget? build() => null;
+
+  void set(ChatTarget? target) => state = target;
+}
+
+/// The conversation the person is looking at right now, or null. On a call,
+/// the call's: they hear it and speak to it, though the chat is under the call.
 final viewedChatProvider = Provider<ChatTarget?>((ref) {
-  if (!ref.watch(appForegroundProvider) || !ref.watch(chatOnScreenProvider)) return null;
+  if (!ref.watch(appForegroundProvider)) return null;
+  if (ref.watch(callChatProvider) case final call?) return call;
+  if (!ref.watch(chatOnScreenProvider)) return null;
   final session = ref.watch(currentSessionProvider);
   if (session == null) return null;
   return (host: ref.watch(activeHostProvider), sessionId: session);
@@ -236,6 +250,7 @@ NotifyPost postFor(ChatAlert alert) => NotifyPost(
   eventId: alert.eventId,
   canApprove: alert.canApprove,
   fullText: alert.fullText,
+  requestToken: alert.petToken,
 );
 
 class _PhoneAlertPrompt {
@@ -362,6 +377,7 @@ class ChatAlertsController extends Notifier<ChatAlert?> {
 
   /// Answers the approval behind a tapped notification button on its host.
   Future<NotifyActionResult> respondAction(NotifyAction action) async {
+    if (ref.read(operatingSystemProvider) == 'ohos') return _respondOhosAction(action);
     final attached = _trackers[action.host];
     if (attached == null || !attached.$2.source.connected) return NotifyActionResult.failed;
     final request = attached.$2.approvalFor(action.eventId);
@@ -369,6 +385,47 @@ class ChatAlertsController extends Notifier<ChatAlert?> {
     try {
       await attached.$1.client.respondApproval(request, action.decision);
       return NotifyActionResult.handled;
+    } catch (_) {
+      return NotifyActionResult.failed;
+    }
+  }
+
+  Future<NotifyActionResult> _respondOhosAction(NotifyAction action) async {
+    final attached = _trackers[action.host];
+    if (attached == null || !attached.$2.source.connected) return NotifyActionResult.failed;
+    final sessionId = action.sessionId;
+    final token = action.requestToken;
+    if (sessionId == null ||
+        token == null ||
+        action.actionId == null ||
+        action.group != notifyGroup(action.host, sessionId) ||
+        action.key != action.eventId) {
+      return NotifyActionResult.gone;
+    }
+    final scope = ref;
+    final lifetime = _lifetime;
+    final generation = attached.$1.client.mux.generation;
+    bool current() =>
+        scope.mounted &&
+        identical(_lifetime, lifetime) &&
+        identical(_trackers[action.host]?.$1.client, attached.$1.client) &&
+        identical(_trackers[action.host]?.$2, attached.$2) &&
+        attached.$2.petRequestMatches(action.eventId, sessionId, token);
+    if (!current()) return NotifyActionResult.gone;
+    if (generation == null) return NotifyActionResult.failed;
+    // Notification previews deliberately allow more than the floating pet can show.
+    // The displayed session is the root; the original request can belong to a subagent.
+    final request = attached.$2.approvalFor(action.eventId);
+    if (request == null) return NotifyActionResult.gone;
+    try {
+      final sent = await answerPhoneApproval(
+        client: attached.$1.client,
+        generation: generation,
+        request: request,
+        decision: action.decision,
+        current: current,
+      );
+      return sent ? NotifyActionResult.handled : NotifyActionResult.gone;
     } catch (_) {
       return NotifyActionResult.failed;
     }
@@ -490,7 +547,7 @@ class ChatAlertsController extends Notifier<ChatAlert?> {
         if (attached()) _onSessionGone(host, session);
       },
       onReannounce: (alert) {
-        if (attached()) _offerPhonePrompt(alert);
+        if (attached()) _onReannounce(alert);
       },
       onRequestEpochChanged: (host) {
         if (attached()) _cancelPhonePrompt(host: host);
@@ -507,6 +564,26 @@ class ChatAlertsController extends Notifier<ChatAlert?> {
     );
     _trackers[host] = (connection, tracker);
     tracker.start();
+  }
+
+  void _onReannounce(ChatAlert alert) {
+    if (ref.read(operatingSystemProvider) != 'ohos') {
+      _offerPhonePrompt(alert);
+      return;
+    }
+    if (_offerPhonePrompt(alert) || ref.read(dsBotSessionFilterProvider)(alert.host, alert.sessionId)) return;
+    // HostReady invalidates old action tokens even when the same event is redelivered.
+    // Refresh only a system notification; do not replay banners or pet activity.
+    if (deliveryFor(
+          alert,
+          prefs: ref.read(notifyPrefsProvider),
+          foreground: ref.read(appForegroundProvider),
+          viewed: ref.read(viewedChatProvider),
+          petOnScreen: ref.read(petOnScreenProvider),
+        ) ==
+        AlertDelivery.system) {
+      unawaited(_channel.show(postFor(alert)));
+    }
   }
 
   void _onAlert(ChatAlert alert, {bool ownerWaited = false}) {

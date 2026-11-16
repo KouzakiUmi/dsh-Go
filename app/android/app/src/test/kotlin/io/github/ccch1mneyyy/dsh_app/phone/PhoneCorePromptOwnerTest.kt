@@ -21,6 +21,7 @@ class PhoneCorePromptOwnerTest {
     private var handoff: () -> HandoffResult = { HandoffResult.CONTINUE }
     private val handoffCauses = mutableListOf<HandoffCause?>()
     private var gateAvailable = true
+    private var locked = false
     private var reviewRequired = false
     private var beforeHandoff: (PhoneTasks.Owner) -> Unit = {}
     private var asked = 0
@@ -32,13 +33,14 @@ class PhoneCorePromptOwnerTest {
     private val queuedStatuses = mutableListOf<() -> Unit>()
     private var lookup: () -> Unit = {}
     private var beforeResolve: () -> Unit = {}
-    private var freshApp: Either<String, AppEntry> = Either.Right(AppEntry("Example", PhoneAppIdentity("example.app", 10123)))
+    private var freshTarget: Either<String, SystemTarget> = Either.Right(SystemTarget.Known(AppEntry("Example", PhoneAppIdentity("example.app", 10123))))
     private var prepareSystem: () -> Unit = {}
     private var afterRejectedStart: () -> Unit = {}
     private var afterStart: () -> Unit = {}
     private var settle: () -> Unit = {}
     private var launchResult = SysResult(true, "launched")
     private var preparedTarget: SystemTarget = SystemTarget.Known(AppEntry("Example", PhoneAppIdentity("example.app", 10123)))
+    private var preparedPackage: String? = null
     private var preparedPlan: SystemLaunch? = null
     private var startedPlan: SystemLaunch? = null
     private var policies = PhonePolicies()
@@ -52,7 +54,7 @@ class PhoneCorePromptOwnerTest {
     private val core = PhoneCore(object : PhoneEnv {
         override fun enabled() = true
         override fun policies() = policyRead?.invoke() ?: policies
-        override fun isLocked() = false
+        override fun isLocked() = locked
         override fun gate() = if (!gateAvailable) null else object : UserGate {
             override fun confirm(request: ConfirmRequest): Decision { focusRequests += request; asked++; confirmedPackages += request.packageName; return confirm() }
             override fun handoff(reason: String, timeoutMs: Long): HandoffResult { asked++; return handoff() }
@@ -79,17 +81,17 @@ class PhoneCorePromptOwnerTest {
             override fun isInstalled(pkg: String) = true
             override fun prepareLaunch(app: AppEntry): Either<String, SystemLaunch> {
                 beforeResolve()
-                return when (val resolved = freshApp) {
+                return when (val resolved = freshTarget) {
                     is Either.Left -> resolved
-                    is Either.Right -> Either.Right(TestSystemLaunch(SystemTarget.Known(resolved.value)).also { preparedPlan = it })
+                    is Either.Right -> Either.Right(TestSystemLaunch(resolved.value, packageName = app.packageName).also { preparedPlan = it })
                 }
             }
             override fun prepareUrl(url: String): Either<String, SystemLaunch> {
                 lookup()
-                return Either.Right(TestSystemLaunch(preparedTarget, "url").also { preparedPlan = it })
+                return Either.Right(TestSystemLaunch(preparedTarget, "url", packageName = preparedPackage).also { preparedPlan = it })
             }
             override fun prepareIntent(spec: IntentSpec, selectedApp: AppEntry?): Either<String, SystemLaunch> =
-                Either.Right(TestSystemLaunch(preparedTarget, "intent", spec).also { preparedPlan = it })
+                Either.Right(TestSystemLaunch(preparedTarget, "intent", spec, preparedPackage).also { preparedPlan = it })
             override fun launch(plan: SystemLaunch, dispatch: PhoneTasks.SystemDispatch): SysResult {
                 commit(dispatch)
                 startedPlan = plan
@@ -402,7 +404,7 @@ class PhoneCorePromptOwnerTest {
 
     @Test fun backgroundOpenUsesFreshIdentityBeforeApprovalAndNeverEmitsUid() {
         val identity = PhoneAppIdentity("example.app", 1010123)
-        freshApp = Either.Right(AppEntry("Fresh label", identity))
+        freshTarget = Either.Right(SystemTarget.Known(AppEntry("Fresh label", identity)))
         var resolved = false
         beforeResolve = { resolved = true }
         confirm = { assertTrue(resolved); Decision.ALLOW_ONCE }
@@ -413,7 +415,7 @@ class PhoneCorePromptOwnerTest {
     }
 
     @Test fun unavailableFreshIdentityNeverFallsBackToTheCachedApp() {
-        freshApp = Either.Left("identity unavailable")
+        freshTarget = Either.Left("identity unavailable")
         val output = core.call(PhoneToolCatalog.OPEN, mapOf("app" to "example.app", "background" to true))
         assertTrue(output.isError)
         assertEquals(0, background.opens)
@@ -810,7 +812,7 @@ class PhoneCorePromptOwnerTest {
 
     @Test fun freshMainAppIdentityIsCheckedInsteadOfTheCachedApp() {
         policies = PhonePolicies(denyPackages = listOf("blocked.handler"))
-        freshApp = Either.Right(AppEntry("Handler", PhoneAppIdentity("blocked.handler", 20234)))
+        freshTarget = Either.Right(SystemTarget.Known(AppEntry("Handler", PhoneAppIdentity("blocked.handler", 20234))))
         assertTrue(openApp().isError)
         assertEquals(0, launches)
         assertNull(startedPlan)
@@ -837,6 +839,85 @@ class PhoneCorePromptOwnerTest {
         assertFalse(openUrl().isError)
         assertNull(tasks.snapshot().app)
         assertSame(SystemTarget.UserChoice, startedPlan!!.target)
+    }
+
+    @Test fun unknownSystemTargetsIgnoreStandingWaiversButAcceptOneRoundGrant() {
+        policies = PhonePolicies(confirmMode = ConfirmMode.ALWAYS)
+        freshTarget = Either.Right(SystemTarget.Unknown)
+        preparedTarget = SystemTarget.Unknown
+        // 始终免确认不继承给「未知处理应用」：允许一次后下一次仍然弹卡。
+        confirm = { Decision.ALLOW_ONCE }
+        repeat(2) { round ->
+            assertFalse(openUrl().isError)
+            assertEquals(round + 1, asked)
+            assertSame(SystemTarget.Unknown, startedPlan!!.target)
+            assertTrue(focusRequests.last().allowRound)
+            assertNull(focusRequests.last().packageName)
+        }
+        // 一次「本轮允许」让本轮同类未知处理应用确认不再问。
+        confirm = { Decision.ALLOW_APP_FOR_TASK }
+        assertFalse(openUrl().isError)
+        assertEquals(3, asked)
+        assertFalse(openUrl().isError)
+        assertEquals(3, asked)
+        // 下一轮从新任务开始，重新询问。
+        replace()
+        assertFalse(openUrl().isError)
+        assertEquals(4, asked)
+        assertFalse(tasks.isWaived)
+        assertFalse(tasks.isApproved("example.app"))
+    }
+
+    @Test fun unknownHandlerStillChecksTheExplicitIntentPackage() {
+        preparedTarget = SystemTarget.Unknown
+        preparedPackage = NavUris.AMAP
+        policies = PhonePolicies(denyPackages = listOf(NavUris.AMAP))
+        val result = core.call(PhoneToolCatalog.INTENT,
+            mapOf("kind" to "navigate", "map" to "amap", "destination" to "station"))
+        assertTrue(result.text, result.isError)
+        assertEquals("refused:deny-list", core.log.last()!!.decision)
+        assertEquals(0, asked)
+        assertEquals(0, intents)
+    }
+
+    @Test fun deniedUnknownRequestDoesNotBlockTheNextRequest() {
+        preparedTarget = SystemTarget.Unknown
+        confirm = { Decision.DENY }
+        assertTrue(openUrl().isError)
+        assertEquals("denied", core.log.last()!!.decision)
+        assertEquals(0, urls)
+        assertTrue(tasks.isActive)
+        confirm = { Decision.ALLOW_ONCE }
+        val next = core.call(PhoneToolCatalog.OPEN, mapOf("url" to "https://example.org/next"))
+        assertFalse(next.text, next.isError)
+        assertEquals(2, asked)
+        assertEquals(1, urls)
+    }
+
+    @Test fun lockingDuringUnknownConfirmationPreventsDispatchAndCanRecover() {
+        preparedTarget = SystemTarget.Unknown
+        confirm = { locked = true; Decision.ALLOW_ONCE }
+        assertTrue(openUrl().isError)
+        assertEquals("refused:locked", core.log.last()!!.decision)
+        assertEquals(0, urls)
+        locked = false
+        confirm = { Decision.ALLOW_ONCE }
+        assertFalse(openUrl().isError)
+        assertEquals(2, asked)
+        assertEquals(1, urls)
+    }
+
+    @Test fun refreshedMainHandlerIsCheckedBeforeDispatch() {
+        val owner = (tasks.begin() as PhoneTasks.Begin.Go).owner
+        val prepared = (core.prepareCall(PhoneToolCatalog.OPEN,
+            mapOf("url" to "https://example.com"), owner) as Either.Right).value
+        preparedTarget = SystemTarget.Known(AppEntry("New handler", PhoneAppIdentity("new.handler", 20234)))
+        policies = PhonePolicies(denyPackages = listOf("new.handler"))
+        val result = core.call(prepared, core.worker)
+        assertTrue(result.text, result.isError)
+        assertEquals("refused:deny-list", core.log.last()!!.decision)
+        assertEquals(0, urls)
+        assertNull(startedPlan)
     }
 
     @Test fun mismatchedPostObservationIsAttachedWithoutRelabelingOrRetryingThePlan() {
@@ -1453,7 +1534,7 @@ class PhoneCorePromptOwnerTest {
         assertEquals(1, asked)
         assertEquals(1, main.focusInputs)
         assertEquals(1, main.focusCloses)
-        assertFalse(focusRequests.single().offerTaskWaiver)
+        assertFalse(focusRequests.single().allowRound)
         assertFalse(focusRequests.single().firstInApp)
         assertNull(focusRequests.single().visualScope)
     }
@@ -1471,7 +1552,7 @@ class PhoneCorePromptOwnerTest {
 
     @Test fun focusRejectsBroadConsentAndClosesCapturedPlan() {
         committedFocusScreen()
-        confirm = { Decision.ALLOW_ALL_FOR_TASK }
+        confirm = { Decision.ALLOW_APP_FOR_TASK }
         assertTrue(focusCall().isError)
         assertEquals(0, main.focusInputs)
         assertEquals(1, main.focusCloses)

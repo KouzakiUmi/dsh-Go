@@ -14,8 +14,6 @@ import android.util.Log
 import android.view.accessibility.AccessibilityManager
 import io.github.ccch1mneyyy.dsh_app.phone.AppVisibility
 import io.github.ccch1mneyyy.dsh_app.phone.ConfirmRequest
-import io.github.ccch1mneyyy.dsh_app.phone.PhoneAppIdentity
-import io.github.ccch1mneyyy.dsh_app.phone.background.Reasons
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneAction
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneControl
 import java.io.File
@@ -100,12 +98,8 @@ internal class A11yProbe(private val service: PhoneA11yService, private val driv
                 "tapxy" -> result(driver.perform(PhoneAction.TapXY(a.s("sid")!!, a.i("x")!!, a.i("y")!!)))
                 "open" -> {
                     val pkg = a.s("pkg")!!
-                    val pm = service.packageManager
-                    val intent = pm.getLaunchIntentForPackage(pkg)
-                    val info = intent?.let { pm.resolveActivity(it, 0)?.activityInfo }
-                    if (info == null || info.applicationInfo.uid < 0) Reasons.of("targetIdentityUnavailable")
-                    else if (info.packageName != pkg) Reasons.of("targetIdentityChanged")
-                    else result(driver.open(PhoneAppIdentity(info.packageName, info.applicationInfo.uid)))
+                    val output = PhoneControl.get(service).core.call("open", mapOf("app" to pkg))
+                    "ok=${!output.isError} msg=${output.text}"
                 }
                 "collect" -> driver.collect(a.s("sid")!!, a.i("id")!!, a.i("pages") ?: 10, a.s("until")).let { r ->
                     "pages=${r.pages} stop=${r.stopReason} items=${r.items.size}\n" + r.items.joinToString("\n") { "- $it" } +

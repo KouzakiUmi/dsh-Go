@@ -108,6 +108,23 @@
   "phoneAppRulesAcceptRisk": "Change anyway",
   "phoneAppRulesPackage": "Package name",
   "phoneAppRulesPackageHint": "Find it in Settings → Apps → App info",
+  "phoneAlwaysAllowTitle": "Always allow",
+  "phoneAlwaysAllowOff": "Off",
+  "phoneAlwaysAllowCount": "{count} apps allowed",
+  "@phoneAlwaysAllowCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "phoneAlwaysAllowSwitchHint": "Send content to the apps you pick without asking",
+  "phoneAlwaysAllowWarning": "Once on, DSH can send content to these apps without asking. Sent content can’t be taken back.",
+  "phoneAlwaysAllowConfirm": "Turn on",
+  "phoneAlwaysAllowAdd": "Add app",
+  "phoneAlwaysAllowEmpty": "No apps allowed yet",
+  "phoneAlwaysAllowRemove": "Remove",
+  "phoneAlwaysAllowSaveFailed": "Couldn’t save",
   "phoneDndRequiresAndroid": "Requires Android 14 or later",
   "phoneDndHiddenScreen": "Works on a hidden screen",
   "phoneNotReadyYet": "Not ready yet",
@@ -184,7 +201,7 @@
   "phoneConfirmTask": "This task",
   "phoneConfirmAlways": "Always skip",
   "phoneConfirmAskHint": "Asks before entering a new app, sending, deleting or paying",
-  "phoneConfirmTaskHint": "Asks once per task",
+  "phoneConfirmTaskHint": "Asks once this round",
   "phoneConfirmAlwaysHint": "Acts without asking",
   "phoneConfirmTitle": "Confirmation",
   "phoneConfirmAlwaysTitle": "Always skip confirmation?",
@@ -466,7 +483,13 @@
   "phonePreviewDescription": "Frames are read only while the preview is visible and stay on this device. The preview is view-only.",
   "phonePreviewOpen": "View background screen",
   "phonePreviewTask": "Preview task {taskId}",
-  "@phonePreviewTask": {"placeholders": {"taskId": {"type": "String"}}},
+  "@phonePreviewTask": {
+    "placeholders": {
+      "taskId": {
+        "type": "String"
+      }
+    }
+  },
   "phonePreviewInUse": "Another task is being previewed",
   "phonePreviewOff": "The task ended or preview is off",
   "phonePreviewUnavailable": "Preview is unavailable or the screen is protected",
@@ -492,14 +515,13 @@
   "phoneSelfCheckScope": "Uses the selected connected channel and a temporary presentation display. App launch, text input, screenshots, OCR and MAIN disturbance are not tested. Cleanup alone does not prove a display was created.",
   "phoneSelfCheckStart": "Start check",
   "phoneSelfCheckCancel": "Request cancellation",
-  "phoneSelfCheckRetry": "Retry cleanup only",
   "phoneSelfCheckRefresh": "Refresh status",
   "phoneSelfCheckSave": "Save sanitized report",
   "phoneSelfCheckSaving": "Saving…",
   "phoneSelfCheckSaved": "Report saved to Downloads/DSH-Go.",
   "phoneSelfCheckSaveFailed": "Could not save the report.",
   "phoneSelfCheckReportHint": "Save only when you choose. The local report contains fixed results, with no screenshots, recognized text, logs, account data or run identifier.",
-  "phoneSelfCheckRunState": "{state, select, idle{Not started} running{Running partial check} cleaning{Cleaning up; cancellation does not undo sent input} done{Check ended; see Technical details for results} cancelled{Cancelled; observed actions remain recorded} cleanup_pending{Cleanup unconfirmed — resources remain reserved} other{Status unavailable}}",
+  "phoneSelfCheckRunState": "{state, select, idle{Not started} running{Running partial check} cleaning{Cleaning up; cancellation does not undo sent input} done{Check ended; see Technical details for results} cancelled{Cancelled; observed actions remain recorded} other{Status unavailable}}",
   "@phoneSelfCheckRunState": {
     "placeholders": {
       "state": {
@@ -523,7 +545,7 @@
       }
     }
   },
-  "phoneSelfCheckReason": "{reason, select, busy{The phone or channel is busy.} unsupported{This device or peer does not support this check.} cancelled{This request was cancelled or retired.} disabled{Phone control is turned off.} locked{The device is locked.} identity{The original run or channel no longer matches.} invalid{The request or result could not be verified.} display{The temporary display could not be verified.} input{Input acceptance or delivery was not confirmed. Sent input is not retried.} cleanup{Resource cleanup is unconfirmed. Retry only cleanup.} denied{The system denied the operation.} timeout{The operation timed out; sent work may still complete.} unavailable{The local status or selected channel is unavailable.} target_unavailable{The fixed target could not be verified. Finish cleanup before starting again.} target_changed{The original target changed. Continue only with cleanup.} target_cleanup{Target cleanup is unconfirmed. Retry only cleanup.} target_main{The target was observed on MAIN. Further steps stopped; complete cleanup.} target_readback{The fixed target count or text did not match. Do not repeat the action; complete cleanup.} tree_cleanup{Tree connection cleanup is unconfirmed. Retry only cleanup.} target_launch{Target launch was denied or unconfirmed. Check the device and complete cleanup.} frame_unavailable{No usable local pattern frame was observed. Complete cleanup before a new check.} frame_mismatch{The actual frame did not match this target and phase. Complete cleanup.} continuity{The limited controlled refresh sequence was not confirmed. This is not a frame-rate result.} main_changed{MAIN samples changed; this may include user actions. Complete cleanup. This does not establish the cause.} main_unchanged{No change was seen at these finite sampling points. Disturbance between them remains unknown.} main_incomplete{MAIN samples are incomplete. They cannot establish absence of disturbance.} not_installed{This self-check does not include OCR. OCR was not tested.} other{An unrecognized result was received.}}",
+  "phoneSelfCheckReason": "{reason, select, busy{The phone or channel is busy.} unsupported{This device or peer does not support this check.} cancelled{This request was cancelled or retired.} disabled{Phone control is turned off.} locked{The device is locked.} identity{The original run or channel no longer matches.} invalid{The request or result could not be verified.} display{The temporary display could not be verified.} input{Input acceptance or delivery was not confirmed. Sent input is not retried.} cleanup{Resource cleanup is unconfirmed. Reconnect the channel, then check again.} denied{The system denied the operation.} timeout{The operation timed out; sent work may still complete.} unavailable{The local status or selected channel is unavailable.} target_unavailable{The fixed target could not be verified. Finish cleanup before starting again.} target_changed{The original target changed. Continue only with cleanup.} target_cleanup{Target cleanup is unconfirmed. Reconnect the channel, then check again.} target_main{The target was observed on MAIN. Further steps stopped; complete cleanup.} target_readback{The fixed target count or text did not match. Do not repeat the action; complete cleanup.} tree_cleanup{Tree connection cleanup is unconfirmed. Reconnect the channel, then check again.} target_launch{Target launch was denied or unconfirmed. Check the device and complete cleanup.} frame_unavailable{No usable local pattern frame was observed. Complete cleanup before a new check.} frame_mismatch{The actual frame did not match this target and phase. Complete cleanup.} continuity{The limited controlled refresh sequence was not confirmed. This is not a frame-rate result.} main_changed{MAIN samples changed; this may include user actions. Complete cleanup. This does not establish the cause.} main_unchanged{No change was seen at these finite sampling points. Disturbance between them remains unknown.} main_incomplete{MAIN samples are incomplete. They cannot establish absence of disturbance.} not_installed{This self-check does not include OCR. OCR was not tested.} other{An unrecognized result was received.}}",
   "@phoneSelfCheckReason": {
     "placeholders": {
       "reason": {
@@ -616,8 +638,7 @@
   "phoneBackgroundParallelUnsupported": "Background operation is unavailable on this device.",
   "phoneBackgroundParallelConnection": "A connection is required before a new background task can start.",
   "phoneBackgroundParallelBusy": "The background channel is being prepared or maintained. New tasks cannot start yet.",
-  "phoneBackgroundParallelRecovery": "Resolve unfinished background resource recovery before starting new tasks.",
-  "phoneBackgroundParallelPeer": "The connected service does not support the required background capabilities.",
+  "phoneGateRetest": "Check this channel again",
   "phoneBackgroundParallelSerial": "This connection supports one background slot. Your preference remains saved.",
   "@phoneBackgroundParallelStatus": {
     "placeholders": {
@@ -642,15 +663,32 @@
   "phoneSkillBundlePublishedUnverified": "The files were published, but full verification has not succeeded. Do not save again.",
   "phoneSkillBundleUnknown": "The save result is not confirmed. Files may already have been written. Do not save again.",
   "phoneSkillBundleRevision": "Route revision: {revision}",
-  "@phoneSkillBundleRevision": {"placeholders": {"revision": {"type": "String"}}},
+  "@phoneSkillBundleRevision": {
+    "placeholders": {
+      "revision": {
+        "type": "String"
+      }
+    }
+  },
   "phoneSkillReplayReview": "Review phone route",
   "phoneSkillReplaySourceChanged": "The local session or connection changed. Select the route again from the current local conversation.",
   "phoneSkillReplayUnavailable": "This route is not available for controlled execution on this phone. The ordinary skill template remains available.",
   "phoneSkillReplayConfirm": "I have reviewed this route and the app selected for this use.",
   "phoneSkillReplayToComposer": "Insert into this conversation",
   "phoneSkillReplayStartText": "A phone route has been selected and reviewed locally. Call only mcp__phone__replay with {request}. If unavailable or refused, hand back to the user/model; do not replay it as ordinary actions.",
-  "@phoneSkillReplayStartText": {"placeholders": {"request": {"type": "String"}}},
+  "@phoneSkillReplayStartText": {
+    "placeholders": {
+      "request": {
+        "type": "String"
+      }
+    }
+  },
   "phoneSkillReplayQueue": "Send route (queue)",
   "phoneSkillReplayQueued": "The route message was accepted or queued. This does not mean the route has executed successfully.",
-  "phoneSkillReplaySendUncertain": "Delivery of the route message was not confirmed. It has not been prepared or replayed again. Check the original conversation."
+  "phoneSkillReplaySendUncertain": "Delivery of the route message was not confirmed. It has not been prepared or replayed again. Check the original conversation.",
+  "phoneIosServiceTitle": "iOS automation service",
+  "phoneIosServiceHint": "Starts on demand after approval and stops when the task ends, closing the system’s “Automation Running” indicator.",
+  "phoneIosSetupHint": "Keep LocalDevVPN connected. On first use, allow control for 30 minutes.",
+  "phoneIosReturnHint": "Return to this conversation when the task finishes, then stop the phone-control service.",
+  "phoneIosNeedsSetup": "The runner is not ready. Check the local engine and developer setup."
 }

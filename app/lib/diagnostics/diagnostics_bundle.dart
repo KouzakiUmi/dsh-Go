@@ -130,6 +130,7 @@ abstract final class DiagnosticsBundle {
       'connection': s.connection,
       'performance': s.performance,
       'voice': {...voiceDiagnosticsFacts(s.native.voice), 'mode': s.voiceMode.name},
+      'evidence': diagnosticEvidenceFacts(s.native.evidence),
     };
   }
 
@@ -192,6 +193,7 @@ abstract final class DiagnosticsBundle {
       if (s.plugins.isNotEmpty) jsonFile('plugins.json', s.plugins),
       if (s.systemIme case final evidence?) jsonFile('system-ime.json', evidence.toJson()),
       if (crash != null) jsonFile('crash.json', crash),
+      if (s.native.evidence.isNotEmpty) jsonFile('app-evidence.json', diagnosticEvidenceFacts(s.native.evidence)),
       if (s.engineLog.isNotEmpty) text('engine.log', log(s.engineLog)),
       if (s.failureLog.isNotEmpty) text('failure.log', log(s.failureLog)),
       if (s.appErrors.isNotEmpty) jsonFile('app-errors.json', s.appErrors.map((error) => error.toJson()).toList()),

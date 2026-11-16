@@ -444,7 +444,9 @@ extension _ScriptMessageOperations on _ScriptCoordinator {
   }) async {
     late _ScriptMessagePlan plan;
     var committed = false;
-    TavernScriptMutation action() => engine._store.transaction(
+    TavernScriptMutation action(_ToolPreparationPermit? permit) => _toolPreparationSql(
+      engine,
+      permit,
       () {
         _checkChatCapture(capture, expectedRevision: options.expectedPathRevision, requireSamePath: requireSamePath);
         check?.call();
@@ -458,7 +460,9 @@ extension _ScriptMessageOperations on _ScriptCoordinator {
       },
     );
     try {
-      final mutation = structural ? await _structureWrite(capture, action) : await _dataWrite(capture, action);
+      final mutation = structural
+          ? await _structureWrite(capture, () => action(null))
+          : await _dataWrite(capture, action);
       // This Future waits for committed cache delivery, never for the lifecycle
       // notifications produced by this write. A RECEIVED handler may await it.
       await _publishMutation(capture.context, mutation, events: plan.lifecycle(mutation));
@@ -510,7 +514,16 @@ extension _ScriptMessageOperations on _ScriptCoordinator {
     final needsData = patches.any(
       (patch) => patch.newIds.isNotEmpty || patch.fields.containsKey('data') || patch.fields.containsKey('swipesData'),
     );
-    final dataContext = needsData ? await _prepareDataContext(capture.chatId) : null;
+    final forceGameplay =
+        needsData &&
+        patches.any(
+          (patch) =>
+              patch.entryState?.containsKey('dshgoPackDefinitionConfigId') == true ||
+              patch.familyIds.any(
+                (id) => engine._stateAt(capture.chatId, id).containsKey('dshgoPackDefinitionConfigId'),
+              ),
+        );
+    final dataContext = needsData ? await _prepareDataContext(capture.chatId, forceGameplay: forceGameplay) : null;
     final speakers = await _messageSpeakers(capture, [
       for (final patch in patches)
         if (patch.fields['speakerCharacterId'] is String) patch.fields['speakerCharacterId']! as String,
@@ -588,7 +601,13 @@ extension _ScriptMessageOperations on _ScriptCoordinator {
     int insertion,
     TavernScriptWriteOptions options,
   ) async {
-    final dataContext = drafts.isEmpty ? null : await _prepareDataContext(capture.chatId);
+    final capturedParent = insertion == 0 ? null : capture.path[insertion - 1].message.nodeId;
+    final dataContext = drafts.isEmpty
+        ? null
+        : await _prepareDataContext(
+            capture.chatId,
+            forceGameplay: engine._stateAt(capture.chatId, capturedParent).containsKey('dshgoPackDefinitionConfigId'),
+          );
     final speakers = await _messageSpeakers(capture, [
       for (final draft in drafts) ?draft.speakerCharacterId,
     ], 'createChatMessages');
@@ -609,7 +628,11 @@ extension _ScriptMessageOperations on _ScriptCoordinator {
         final before = insertion < oldPath.length ? oldPath[insertion] : null;
         final oldFamily = before == null ? <String>[] : plan.children(plan.links[before]!.parentId, physical: true);
         String? parent = insertion == 0 ? null : oldPath[insertion - 1];
-        var baseline = parent == null ? _initialMessageState(context) : _copy(plan.page(parent).state);
+        final initial = parent == null ? _initialMessageState(context) : null;
+        var baseline = initial?.state ?? _copy(plan.page(parent!).state);
+        if (initial != null && initial.adoptedGameplay != null) {
+          plan.initialized[drafts.first.id] = initial;
+        }
         final chat = engine._store.chat(capture.chatId);
         final settings = _personaSettings(
           engine._effectiveSettings(chat, engine._chatCodec.metadataForNode(engine._store, capture.chatId)),
@@ -861,6 +884,7 @@ class _ScriptMessagePlan {
   final edited = <String>{};
   final updated = <String>{};
   final prepared = <({String id, _ScriptPreparedData value})>[];
+  final initialized = <String, _ScriptPreparedData>{};
   final swiped = <({String? before, String after})>[];
   late List<String> path;
   late int sequence;
@@ -1225,6 +1249,19 @@ class _ScriptMessagePlan {
   }
 
   TavernScriptMutation commit() {
+    // Normalize only the final batch projection. An intermediate role change
+    // must not erase an identity a later patch validly keeps as character.
+    for (final value in pages.values) {
+      if (removed.contains(value.id) || value.role == TavernRole.character || value.speakerCharacterId == null) {
+        continue;
+      }
+      value.speakerCharacterId = null;
+      if (!value.created) {
+        value.dirty.add('speakerCharacterId');
+        updated.add(value.id);
+        affected.add(value.id);
+      }
+    }
     final beforeChat = engine._store.chat(chatId);
     final storedLatest = removed.isEmpty ? null : engine._storedLatestInspection(beforeChat);
     final latestPointer = _map(_map(beforeChat.metadata['dshgo'])['latestInspection'])['nodeId'];
@@ -1243,6 +1280,10 @@ class _ScriptMessagePlan {
         final parent = links[value.id]!.parentId;
         if (parent != null && !originalLinks.containsKey(parent) && !inserted.contains(parent)) {
           continue;
+        }
+        final initial = initialized[value.id];
+        if (initial != null) {
+          owner._ensurePreparedGameplay(initial);
         }
         engine._store.append(
           chatId,

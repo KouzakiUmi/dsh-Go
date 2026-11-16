@@ -1,4 +1,6 @@
-// Layout idea after PiPilot (https://github.com/CikeSeven/pi_pilot), MIT, Copyright (c) 2026 CikeSeven. See THIRD_PARTY_NOTICES.md.
+// SPDX-FileCopyrightText: 2026 CikeSeven
+// SPDX-License-Identifier: MIT
+// See THIRD_PARTY_NOTICES.md.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -264,7 +266,7 @@ class SettingsSwitchTile extends StatelessWidget {
         tint: tint,
         tinted: tinted,
         onTap: onChanged == null ? null : () => change(!value),
-        trailing: Switch(value: value, onChanged: onChanged == null ? null : change),
+        trailing: Switch.adaptive(value: value, onChanged: onChanged == null ? null : change),
       ),
     );
   }
@@ -398,6 +400,7 @@ class SettingsSegmentTile<T> extends StatelessWidget {
     required this.segments,
     required this.selected,
     required this.onChanged,
+    this.onReselect,
     this.tinted = true,
   }) : assert(title != null || spot != null);
 
@@ -416,6 +419,9 @@ class SettingsSegmentTile<T> extends StatelessWidget {
   final List<PillSegment<T>> segments;
   final T selected;
   final ValueChanged<T>? onChanged;
+
+  /// See [SegmentedPill.onReselect].
+  final ValueChanged<T>? onReselect;
   final bool tinted;
 
   @override
@@ -451,6 +457,7 @@ class SettingsSegmentTile<T> extends StatelessWidget {
               segments: segments,
               selected: selected,
               onChanged: onChanged,
+              onReselect: onReselect,
               expand: !inline,
             );
             final note = switch (subtitle) {

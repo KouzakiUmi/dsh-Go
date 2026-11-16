@@ -185,6 +185,8 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
         model: config.model,
         deepseek: config.deepseek,
         thinking: config.thinking,
+        headers: config.headers,
+        auxiliary: config.auxiliary,
       ),
       engine._clock(),
     );
@@ -255,7 +257,7 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
         record.cancellation.isCancelled ||
         error is TavernModelException && error.kind == TavernFailure.cancelled ||
         error is TavernScriptException && error.code == TavernScriptErrorCode.cancelled;
-    final original = error is TavernScriptException ? error : null;
+    final original = _scriptReportedFailure(error);
     final model = error is TavernModelException
         ? error.kind
         : error is PromptBudgetExceeded
@@ -377,11 +379,14 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
       unawaited(cancelSubscription());
     }
 
+    final gameplayCapture = record.capture?.gameplayCapture;
+    final requestCancellation = _gameplayResourceRequestCancellation(engine, gameplayCapture, record.cancellation);
     final config = record.config;
     final transportConfig = TavernModelConfig(
       apiKey: () async {
         record.receipt.phase = 'key';
         final key = await config.apiKey();
+        requestCancellation.check();
         if (record.terminal == null && !record.cancellation.isCancelled) record.receipt.phase = 'model';
         return key;
       },
@@ -389,9 +394,12 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
       model: config.model,
       deepseek: config.deepseek,
       thinking: config.thinking,
+      headers: config.headers,
+      auxiliary: config.auxiliary,
     );
     try {
       record.cancellation.check();
+      _checkScriptGameplayResources(engine, gameplayCapture, 'generate');
       record.status = TavernScriptGenerationStatus.running;
       record.receipt.phase = 'key';
       final slashSpec = record.slashSpec;
@@ -399,12 +407,18 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
           .generate(
             config: transportConfig,
             body: _captureScriptObject(body),
-            cancellation: record.cancellation,
+            cancellation: requestCancellation,
             onRequestStarted: slashSpec == null ? null : (attempt) => slashSpec.onModelStarted(record, attempt),
           )
           .listen(
             (delta) {
               if (record.terminal != null || record.cancellation.isCancelled) return;
+              try {
+                _checkScriptGameplayResources(engine, gameplayCapture, 'generate');
+              } catch (error) {
+                fail(error);
+                return;
+              }
               record.receipt.phase = 'model';
               switch (delta) {
                 case ModelText(:final text):
@@ -476,7 +490,12 @@ extension _ScriptGenerationOperations on _ScriptCoordinator {
                     error: _generationFailure(record, const TavernModelException(TavernFailure.cancelled, 'cancelled')),
                   );
                 } else {
-                  record.finish();
+                  try {
+                    _checkScriptGameplayResources(engine, gameplayCapture, 'generate');
+                    record.finish();
+                  } catch (error) {
+                    record.finish(error: _generationFailure(record, error));
+                  }
                 }
               }
               release();

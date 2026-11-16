@@ -65,6 +65,8 @@ class _Bridge extends DshConnection {
     Map<String, String>? query,
     Map<String, String>? headers,
     Duration? timeout,
+    bool followRedirects = true,
+    int? maxResponseBytes,
   }) async {
     if (path == '$dshGoCompanionPath/memories') {
       listReads++;
@@ -403,6 +405,22 @@ void main() {
     expect(room.a.writes, hasLength(1));
     expect(find.text('Changed elsewhere'), findsOneWidget);
     expect(find.text('刚才另一处改过了，已经刷新'), findsOneWidget);
+    await room.close(tester);
+  });
+
+  testWidgets('a write whose reply is lost rereads what the host kept', (tester) async {
+    final room = _Room();
+    room.a.nextWrite = () async {
+      room.a.text = 'A changed';
+      room.a.revision++;
+      throw const DshClosedException('reply lost after the write landed');
+    };
+    await room.open(tester);
+    final reads = room.a.listReads;
+    await edit(tester, 'A memory', 'A changed');
+    expect(room.a.writes, hasLength(1));
+    expect(room.a.listReads, greaterThan(reads));
+    expect(find.text('A changed'), findsOneWidget);
     await room.close(tester);
   });
 

@@ -4,75 +4,49 @@ import io.github.ccch1mneyyy.dsh_app.phone.PhoneAppIdentity
 import org.junit.Assert.*
 import org.junit.Test
 
-/** The actual Core owner binding and actual native receipt checks; no Android framework stubs. */
+/** The background screen taken as it is: what a request names, what is on top, where an app went. */
 class TargetIdentityTest {
     private val a = PhoneAppIdentity("example.app", 10123)
     private val otherUser = PhoneAppIdentity("example.app", 1010123)
     private val sharedUid = PhoneAppIdentity("example.shared", 10123)
-    private fun request(state: TargetIdentity, target: PhoneAppIdentity, opening: Boolean = false) =
-        state.request(target.packageName, true, 1, true, target.uid, opening)
-    private fun opened(target: PhoneAppIdentity = a) = TargetIdentity().also { request(it, target, true); it.opened(target) }
-    private fun fails(code: String, body: () -> Unit) {
-        assertEquals(code, assertThrows(TargetIdentity.Failure::class.java) { body() }.code)
+
+    @Test fun aRequestNamesItsTargetWithoutAnyVersionHandshake() {
+        assertEquals(a, TargetIdentity.requested(a.packageName, a.uid))
+        for (uid in listOf(null, -1, 10123L, "10123")) assertNull(TargetIdentity.requested(a.packageName, uid))
     }
 
-    @Test fun capabilityRequiresTheExactIntegerVersion() {
-        assertTrue(TargetIdentity.supported(1))
-        for (value in listOf(null, 0, 2, 1L, 1.0, "1", true)) assertFalse(TargetIdentity.supported(value))
+    @Test fun unreadableUidEvidenceFallsBackToThePackage() {
+        assertTrue(TargetIdentity.sameApp(a.packageName, a.uid, a))
+        // Task info without a readable uid: the package on top decides, the action goes ahead.
+        assertTrue(TargetIdentity.sameApp(a.packageName, null, a))
+        // A readable different uid is another install (another user's copy): not the same app.
+        assertFalse(TargetIdentity.sameApp(otherUser.packageName, otherUser.uid, a))
+        assertFalse(TargetIdentity.sameApp(sharedUid.packageName, sharedUid.uid, a))
+        assertFalse(TargetIdentity.sameApp(null, null, a))
     }
 
-    @Test fun aPresentMalformedIdentityNeverFallsBackToLegacy() {
-        for ((version, uid) in listOf(null to 10123, 1 to null, "1" to 10123, 1L to 10123,
-                1 to -1, 1 to 10123L, 1 to "10123")) {
-            fails("targetIdentityUnavailable") { TargetIdentity().request(a.packageName, true, version, true, uid, true) }
-        }
-        fails("targetIdentityUnavailable") { TargetIdentity().request(a.packageName, false, null, true, 10123, true) }
-        fails("targetIdentityUnavailable") { TargetIdentity().request(a.packageName, true, 1, false, null, true) }
+    @Test fun anAppNotOnTopIsBehindElsewhereOrGone() {
+        val owned = 7
+        assertEquals(TargetIdentity.Placement.OWNED_DISPLAY, TargetIdentity.placement(a.packageName, owned,
+            listOf(owned to setOf("share.sheet"), owned to setOf(a.packageName))))
+        // Typically the main screen: already running there, or not allowed on a second display.
+        assertEquals(TargetIdentity.Placement.OTHER_DISPLAY, TargetIdentity.placement(a.packageName, owned,
+            listOf(0 to setOf("launcher"), 0 to setOf(a.packageName))))
+        assertEquals(TargetIdentity.Placement.NONE, TargetIdentity.placement(a.packageName, owned,
+            listOf(0 to setOf("launcher"), owned to setOf("other.app"))))
+        assertEquals(TargetIdentity.Placement.NONE, TargetIdentity.placement(a.packageName, owned, emptyList()))
+        assertEquals(listOf("behind", "leftDisplay", "closed"),
+            listOf(TargetIdentity.Placement.OWNED_DISPLAY, TargetIdentity.Placement.OTHER_DISPLAY, TargetIdentity.Placement.NONE).map { it.wire })
     }
 
-    @Test fun oldCallersStayLegacyButNeitherModeCanChangeWithinAnOwner() {
-        val old = TargetIdentity()
-        assertNull(old.request(a.packageName, false, null, false, null, true))
-        assertNull(old.request(sharedUid.packageName, false, null, false, null, false))
-        fails("targetIdentityChanged") { request(old, a, true) }
-        val modern = opened()
-        fails("targetIdentityChanged") { modern.request(a.packageName, false, null, false, null, false) }
-        fails("targetIdentityChanged") { modern.request(a.packageName, false, null, false, null, true) }
+    @Test fun aReplyNamesTheAppOnTopOnlyWithATypedUid() {
+        assertEquals(a, TargetIdentity.shown(a.packageName, a.uid))
+        assertEquals(otherUser, TargetIdentity.shown(otherUser.packageName, otherUser.uid))
+        for (uid in listOf(null, -1, 10123L)) assertNull(TargetIdentity.shown(a.packageName, uid))
+        assertNull(TargetIdentity.shown(null, a.uid))
     }
 
-    @Test fun unconfirmedReplacementCannotBorrowOldObservationOrChangeTargetThroughAnAction() {
-        val state = opened()
-        assertEquals(a, request(state, a))
-        fails("targetIdentityChanged") { request(state, otherUser) }
-        assertEquals(sharedUid, request(state, sharedUid, true))
-        assertNull(state.current)
-        fails("targetIdentityUnavailable") { request(state, a) }
-        fails("targetIdentityUnavailable") { request(state, sharedUid) }
-        state.opened(sharedUid)
-        assertEquals(sharedUid, request(state, sharedUid))
-        fails("targetIdentityChanged") { request(state, a) }
-    }
-
-    @Test fun identityLossKeepsTheModeUntilActualResourceRelease() {
-        val state = opened()
-        state.invalidate()
-        fails("targetIdentityUnavailable") { request(state, a) }
-        fails("targetIdentityChanged") { state.request(a.packageName, false, null, false, null, true) }
-        state.clear() // Called by Core only after its release path has completed.
-        assertNull(state.request(a.packageName, false, null, false, null, true))
-    }
-
-    @Test fun actualTaskNeedsPackageUidAndUserTogetherIncludingSharedUid() {
-        assertTrue(TargetIdentity.matchesTask(a, a.packageName, a.uid, 0, 0))
-        assertTrue(TargetIdentity.matchesTask(otherUser, otherUser.packageName, otherUser.uid, 10, 10))
-        assertFalse(TargetIdentity.matchesTask(a, sharedUid.packageName, sharedUid.uid, 0, 0))
-        assertFalse(TargetIdentity.matchesTask(a, a.packageName, otherUser.uid, 10, 0))
-        assertFalse(TargetIdentity.matchesTask(a, a.packageName, a.uid, 10, 0))
-        assertFalse(TargetIdentity.matchesTask(a, a.packageName, null, 0, 0))
-        assertFalse(TargetIdentity.matchesTask(a, a.packageName, a.uid, null, 0))
-    }
-
-    @Test fun nativeSnapshotReceiptRequiresActualTypedMatchingIdentity() {
+    @Test fun coordinateReceiptRequiresActualTypedMatchingIdentity() {
         assertTrue(TargetIdentity.receipt(a, 1, a.packageName, a.uid))
         assertFalse(TargetIdentity.receipt(a, 1L, a.packageName, a.uid))
         assertFalse(TargetIdentity.receipt(a, 1, a.packageName, a.uid.toLong()))
@@ -80,6 +54,7 @@ class TargetIdentityTest {
         assertFalse(TargetIdentity.receipt(a, 1, otherUser.packageName, otherUser.uid))
         assertFalse(TargetIdentity.receipt(a, null, null, null))
     }
+
     @Test fun backgroundOpenConfirmationRequiresEveryTypedFactFromThisReply() {
         fun accepts(ok: Any? = true, evidence: Any? = 1, display: Any? = 7,
                     version: Any? = 1, pkg: Any? = a.packageName, uid: Any? = a.uid) =

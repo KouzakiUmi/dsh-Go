@@ -3,6 +3,7 @@
 // the reply's same-path image left out, geometry, the metadata line, save /
 // share from the original bytes, the viewer, and goldens.
 
+import 'package:dsh_app/ui/fx/image_gen/image_generation.dart';
 import 'package:dsh_app/state/chat_state.dart';
 import 'package:dsh_app/state/features_state.dart' show jobsProvider;
 import 'package:dsh_app/ui/chat/chat_rows.dart';
@@ -20,6 +21,7 @@ import 'package:dsh_app/ui/theme/app_icons.dart';
 import 'package:dsh_app/ui/theme/theme.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -213,6 +215,29 @@ void main() {
       expect(find.text('已保存 2 张到相册'), findsOneWidget);
     });
 
+    for (final (cancelAt, line) in [(1, null), (2, '已保存 1 张到相册')]) {
+      testWidgets('backing out of the album window at picture $cancelAt: stops asking, and no failure', (tester) async {
+        var calls = 0;
+        const channel = MethodChannel('dsh/media');
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+          if (++calls == cancelAt) throw PlatformException(code: 'cancelled');
+          return 'file://media/Photo/$calls/a.png';
+        });
+        addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+        await pumpConversation(tester, 'synthetic_header_image');
+        await tester.tap(find.descendant(of: find.byType(MediaActionRow), matching: find.byIcon(AppIcons.save)));
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await pumpFrames(tester);
+        expect(calls, cancelAt, reason: 'nothing more is asked');
+        expect(find.text('保存失败，请重试'), findsNothing);
+        if (line == null) {
+          expect(find.byType(SnackBar), findsNothing);
+        } else {
+          expect(find.text(line), findsOneWidget);
+        }
+      });
+    }
+
     testWidgets('a running video waits in its shape', (tester) async {
       await pumpConversation(tester, 'synthetic_video_running');
       expect(find.text('生成中'), findsOneWidget);
@@ -221,9 +246,7 @@ void main() {
       expect(find.descendant(of: find.byType(MediaMetaLine), matching: find.textContaining('5 秒')), findsOneWidget);
       expect(find.byType(MediaActionRow), findsNothing);
       // 16:9 at the column's width.
-      final box = tester.getRect(
-        find.descendant(of: find.byType(MediaCard), matching: find.byType(DecoratedBox)).first,
-      );
+      final box = tester.getRect(find.descendant(of: find.byType(MediaCard), matching: find.byType(ImageGeneration)));
       expect(box.width / box.height, moreOrLessEquals(16 / 9, epsilon: 0.01));
     });
 

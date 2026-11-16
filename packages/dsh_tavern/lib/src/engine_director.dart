@@ -1,5 +1,15 @@
 part of 'engine.dart';
 
+TavernModelConfig _auxiliaryModelConfig(TavernModelConfig config) =>
+    config.auxiliary ??
+    TavernModelConfig(
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.deepseek ? 'deepseek-flash' : config.model,
+      deepseek: config.deepseek,
+      headers: config.headers,
+    );
+
 Map<String, Object?> _directorIssue(String code, {String? id}) => {'kind': 'director', 'code': code, 'id': ?id};
 
 Object? _directorCanonical(Object? value) {
@@ -50,6 +60,17 @@ Map<String, Object?> _directorSource(TavernEngine engine, String chatId, String?
   final saved = nodeId == null && group == null
       ? _emptyChatState(engine._chatCodec.metadataForNode(engine._store, chatId))
       : engine._stateAt(chatId, nodeId);
+  return _directorSourceFromFacts(nodeId, history, group, saved, visible: visible);
+}
+
+Map<String, Object?> _directorSourceFromFacts(
+  String? nodeId,
+  List<StoredNode> history,
+  TavernGroupChat? group,
+  Map<String, Object?> saved, {
+  List<StoredNode>? visible,
+}) {
+  visible ??= history.where((node) => !node.message.hidden && !_systemMessage(node)).toList();
   final input = _StateInput(saved);
   return _copy({
     'kind': nodeId == null ? 'empty' : 'node', 'nodeId': nodeId,
@@ -90,6 +111,7 @@ Map<String, Object?> _directorSource(TavernEngine engine, String chatId, String?
       if (input.valueExists) 'value': input.value,
       'variables': saved['variables'],
       'issues': input.issues,
+      if (saved.containsKey('dshgoPackDefinitionConfigId')) 'definitionConfigId': saved['dshgoPackDefinitionConfigId'],
     },
     if (saved.containsKey(_storyRuntimeKey)) 'storyRuntime': saved[_storyRuntimeKey],
     if (saved.containsKey(_secretRuntimeKey)) 'secretRuntime': saved[_secretRuntimeKey],
@@ -99,8 +121,30 @@ Map<String, Object?> _directorSource(TavernEngine engine, String chatId, String?
 String _directorSourceFingerprint(
   Map<String, Object?> source,
   Map<String, Object?> card,
+  Map<String, Object?> persona, {
+  String? effectiveConfigId,
+}) => _directorHash({'source': source, 'card': card, 'persona': persona, 'effectiveConfigId': ?effectiveConfigId});
+
+String? _directorPathReason(TavernDirectorRun run, String? contextNodeId, List<String> path) =>
+    run.sourceKind == 'empty'
+    ? contextNodeId == null
+          ? null
+          : 'director_source_not_on_path'
+    : path.contains(run.sourceNodeId)
+    ? null
+    : 'director_source_not_on_path';
+
+String? _directorSourceReason(
+  TavernDirectorRun run,
+  Map<String, Object?> data,
   Map<String, Object?> persona,
-) => _directorHash({'source': source, 'card': card, 'persona': persona});
+  Map<String, Object?> source, {
+  String? effectiveConfigId,
+}) =>
+    _directorSourceFingerprint(source, _directorCard(data), persona, effectiveConfigId: effectiveConfigId) ==
+        run.sourceFingerprint
+    ? null
+    : 'director_source_changed';
 
 TavernUsage? _directorUsage(Map<String, Object?>? value) {
   if (value == null) {
@@ -181,8 +225,17 @@ class _DirectorJob {
     this.card,
     this.secret = false,
     this.group,
+    this.gameplay,
+    this.gameplayAdmission,
   }) : id = 'director-${_newStateId()}',
-       requestKey = _directorHash({'source': source, 'settings': settings, 'persona': persona, 'secret': secret});
+       requestKey = _directorHash({
+         'source': source,
+         'settings': settings,
+         'persona': persona,
+         'secret': secret,
+         if (gameplayAdmission != null) 'gameplayAdmission': gameplayAdmission.identity,
+         if (gameplay != null) 'effectiveConfigId': gameplay.effectiveConfigId,
+       });
   final String id;
   final String chatId;
   final String characterId;
@@ -198,6 +251,8 @@ class _DirectorJob {
   final int cardRevision;
   final String requestKey;
   Map<String, Object?>? card;
+  _GameplayRuntime? gameplay;
+  _GameplayAdmission? gameplayAdmission;
   String fingerprint = '';
   final cancellation = ModelCancellation();
   final result = Completer<TavernDirectorRun>();
@@ -213,6 +268,53 @@ class _DirectorJob {
   String? finishReason;
   bool running = false;
   bool discarded = false;
+}
+
+/// Apply before constructing a request's existing ModelRequestContext, so
+/// native raw-usage observation still sees that outer context unchanged.
+ModelCancellation _gameplayRequestCancellation(
+  TavernEngine engine,
+  _GameplayAdmission? admission,
+  ModelCancellation original,
+) => admission == null
+    ? original
+    : _GameplayRequestCancellation(() => _gameplayAdmissionCurrent(engine, admission), original);
+
+ModelCancellation _gameplayResourceRequestCancellation(
+  TavernEngine engine,
+  _GameplayResourceCapture? capture,
+  ModelCancellation original,
+) => capture == null
+    ? original
+    : _GameplayRequestCancellation(() => _gameplayResourcesCurrent(engine, capture), original);
+
+/// Native transport checks after its key await and before each send. Source
+/// changes also revoke the rest of an admitted request through its real token.
+final class _GameplayRequestCancellation extends ModelCancellation {
+  _GameplayRequestCancellation(this.current, this.original);
+  final bool Function() current;
+  final ModelCancellation original;
+
+  @override
+  bool get isCancelled => original.isCancelled;
+  @override
+  Future<void> get whenCancelled => original.whenCancelled;
+  @override
+  void cancel() => original.cancel();
+  @override
+  Future<T> wait<T>(Future<T> operation) {
+    check();
+    return original.wait(operation);
+  }
+
+  @override
+  void check() {
+    original.check();
+    if (!current()) {
+      original.cancel();
+      original.check();
+    }
+  }
 }
 
 class _DirectorPrepared {
@@ -300,16 +402,22 @@ class _DirectorCoordinator {
     TavernModelConfig? config,
     bool secret = false,
     int? cardRevision,
+    _GameplayRuntime? gameplay,
+    _GameplayAdmission? gameplayAdmission,
   }) {
     final chat = engine._store.chat(chatId);
     final chosen = selection ?? engine._personas.resolve(personaId: chat.personaId);
     final options = settings ?? _personaSettings(engine._effectiveSettings(chat), chosen);
     final leaf = nodeId ?? chat.currentLeafId;
+    final source = _directorSource(engine, chatId, leaf);
+    final admission =
+        gameplayAdmission ??
+        _captureGameplayAdmission(engine, characterId: chat.characterId, chatId: chatId, settings: options);
     return _DirectorJob(
       chatId: chatId,
       characterId: chat.characterId,
       nodeId: leaf,
-      source: _directorSource(engine, chatId, leaf),
+      source: source,
       settings: _copy(options),
       persona: _directorPersona(chosen, options),
       originalConfig: config ?? engine._config,
@@ -319,6 +427,8 @@ class _DirectorCoordinator {
       cardRevision: cardRevision ?? _cardRevisions[chat.characterId] ?? 0,
       card: card == null ? null : _copy(card),
       group: engine._store.groupChat(chatId),
+      gameplay: gameplay,
+      gameplayAdmission: admission,
     );
   }
 
@@ -380,6 +490,7 @@ class _DirectorCoordinator {
         turn.reply == null) {
       return;
     }
+    final started = turn.profile?.now;
     try {
       final chat = engine._store.chat(turn.chat.id);
       final selection = engine._personas.resolve(personaId: chat.personaId);
@@ -400,11 +511,11 @@ class _DirectorCoordinator {
       }
       final count = (old?['count'] as int? ?? 0) + 1;
       final own = _map(settings['director']);
-      final cardOptions = _map(_map(_map(turn.directorCard?['extensions'])['dshgo'])['director']);
-      final rawEvery = own.containsKey('every') ? own['every'] : cardOptions['every'];
-      final hasEvery = own.containsKey('every') || cardOptions.containsKey('every');
-      final validEvery = rawEvery is int && rawEvery >= 1 && rawEvery <= 1000;
-      final every = validEvery ? rawEvery : 1;
+      final cardOptions = turn.gameplay == null
+          ? _map(_map(_map(turn.directorCard?['extensions'])['dshgo'])['director'])
+          : _map(_map(turn.gameplay!.effectiveDefinitions['effective'])['director']);
+      final cadence = director_core.directorEvery(settings: own, card: cardOptions);
+      final every = cadence.every;
       final tickId = 'director-tick-${_newStateId()}';
       engine._store.writeAgentRun(
         StoredAgentRun(
@@ -418,7 +529,7 @@ class _DirectorCoordinator {
             'count': count,
             'every': every,
             'scheduled': count % every == 0,
-            if (hasEvery && !validEvery) 'issue': 'invalid_director_every',
+            if (cadence.invalid) 'issue': 'invalid_director_every',
           },
         ),
       );
@@ -435,8 +546,10 @@ class _DirectorCoordinator {
         settings: settings,
         selection: selection,
         cardRevision: turn.secretCardRevision,
+        gameplay: turn.gameplay,
+        gameplayAdmission: turn.gameplayAdmission,
       );
-      if (hasEvery && !validEvery) {
+      if (cadence.invalid) {
         job.issues.add(_directorIssue('invalid_director_every'));
       }
       _admit(job);
@@ -452,15 +565,21 @@ class _DirectorCoordinator {
           selection: selection,
           secret: true,
           cardRevision: turn.secretCardRevision,
+          gameplay: turn.gameplay,
+          gameplayAdmission: turn.gameplayAdmission,
         );
         secret.secretCapability = _captureSecretCapability(secret);
-        if (secret.secretCapability?.slotIds.isNotEmpty == true) _admit(secret);
+        if (secret.secretCapability?.slotIds.isNotEmpty == true) {
+          _admit(secret);
+        }
       }
     } catch (_) {
       // The main response is already committed and terminal. Its success
       // cannot be undone by an optional background-trigger storage failure.
       _transientIssues[turn.chat.id] = [_directorIssue('director_trigger_failed')];
       changed(turn.chat.id);
+    } finally {
+      turn.profile?.record('director_after_turn', started!);
     }
   }
 
@@ -495,8 +614,37 @@ class _DirectorCoordinator {
         job.card = _effectiveCard(record.card.data, job.settings);
       }
       job.cancellation.check();
+      final admission = job.gameplayAdmission!;
+      final forceGameplay = _map(job.source['state']).containsKey('definitionConfigId');
+      if (job.gameplay == null && (admission.hasActivePacks || forceGameplay)) {
+        job.gameplay = await job.cancellation.wait(
+          _prepareIO(
+            job,
+            _prepareGameplayRuntime(
+              engine,
+              admission,
+              hostData: job.card!,
+              settings: job.settings,
+              force: forceGameplay,
+            ),
+          ),
+        );
+        job.cancellation.check();
+      }
       final card = _directorCard(job.card!);
-      job.fingerprint = _directorSourceFingerprint(job.source, card, job.persona);
+      job.fingerprint = _directorSourceFingerprint(
+        job.source,
+        card,
+        job.persona,
+        effectiveConfigId: job.gameplay?.effectiveConfigId,
+      );
+      final resources = _resolveGameplayResources(
+        _GameplayResourceCapture.fromAdmission(admission),
+        job.settings,
+        actorId: job.characterId,
+        worldInfoCharacterIds: [job.characterId],
+        kinds: const {'lorebook'},
+      );
       final loaded = await job.cancellation.wait(
         _prepareIO(
           job,
@@ -504,6 +652,7 @@ class _DirectorCoordinator {
             job.characterId,
             job.card!,
             job.settings,
+            gameplayResources: resources,
             personaId: job.persona['id'] as String?,
             checkCancelled: job.cancellation.check,
           ),
@@ -512,12 +661,21 @@ class _DirectorCoordinator {
       job.cancellation.check();
       final memory = _directorMemoryBook(engine, job.chatId, job.at);
       job.issues.addAll(memory.issues);
-      final books = [...loaded.loaded, if (memory.book != null) memory.book!];
+      final withLegacy = [...loaded.loaded, if (memory.book != null) memory.book!];
+      final remembered = _rememberMemoryBook(engine, job.chatId, job.nodeId, withLegacy);
+      job.issues.addAll(remembered.issues);
+      final books = [...withLegacy, if (remembered.book != null) remembered.book!];
+      final memoryOwners = <String, WorldInfoBook>{
+        if (memory.book case final book?)
+          for (final entry in book.entries) entry.uid: book,
+        ...remembered.owners,
+      };
       final catalog = _directorCatalog(
         books,
         job.chatId,
         strategy: WorldInfoSettings.fromJson(_map(job.settings['worldInfo'])).strategy,
         memoryBook: memory.book,
+        memoryOwners: memoryOwners,
       );
       job.catalog = catalog.entries;
       job.issues.addAll(catalog.issues);
@@ -528,7 +686,7 @@ class _DirectorCoordinator {
       // Read that changed definition before deciding whether the legacy frozen
       // input is still usable; a second edit during this read is unavailable.
       if ((_cardRevisions[job.characterId] ?? 0) != job.cardRevision &&
-          !_secretDefinition(job.card!).defined &&
+          !(job.gameplay?.secrets ?? _secretDefinition(job.card!)).defined &&
           !job.source.containsKey('secretRuntime')) {
         final revision = _cardRevisions[job.characterId] ?? 0;
         final current = await job.cancellation.wait(_prepareIO(job, engine._record(job.characterId)));
@@ -550,6 +708,7 @@ class _DirectorCoordinator {
         currentSettings,
         job.source,
         authorizationSource: currentSource,
+        gameplay: job.gameplay,
       );
       if (secretInput.policy != null && (_cardRevisions[job.characterId] ?? 0) != job.cardRevision) {
         throw const FormatException('Protected director card changed before the request.');
@@ -568,8 +727,11 @@ class _DirectorCoordinator {
           final priorPolicy = previous.result['secretPolicy'];
           // Unprotected ordinary notes keep their established inheritance.
           // Any protected side requires both provenance and current knowledge.
-          if ((priorPolicy == null && secretInput.policy == null) ||
-              (_eligibility(run, previous, job.card!, job.persona, job.nodeId) == null &&
+          if ((job.gameplay == null &&
+                  !previous.result.containsKey('effectiveConfigId') &&
+                  priorPolicy == null &&
+                  secretInput.policy == null) ||
+              (_eligibility(run, previous, job.card!, job.persona, job.nodeId, gameplay: job.gameplay) == null &&
                   _stateJsonEqual(priorPolicy, secretInput.policy))) {
             previousNotes = run.notes ?? '';
           } else {
@@ -584,9 +746,9 @@ class _DirectorCoordinator {
       if (summaries.length > 20) {
         job.issues.add(_directorIssue('summary_catalog_truncated'));
       }
-      final story = _storyDirectorContext(job.card!, job.source);
+      final story = _storyDirectorContext(job.card!, job.source, gameplay: job.gameplay);
       job.storyPhase = story.phase;
-      job.eventCapability = _cardEventCapability(job.card!, job.settings);
+      job.eventCapability = _cardEventCapability(job.card!, job.settings, gameplay: job.gameplay);
       final groupDirectory = job.group == null
           ? null
           : await job.cancellation.wait(_prepareIO(job, engine._groups.directory(job.group!)));
@@ -606,14 +768,7 @@ class _DirectorCoordinator {
       if (input.length > 1024 * 1024 || utf8.encode(input).length > 1024 * 1024) {
         throw const TavernModelException(TavernFailure.contextTooLong, 'director_input_limit');
       }
-      final original = job.originalConfig;
-      final config = TavernModelConfig(
-        apiKey: original.apiKey,
-        baseUrl: original.baseUrl,
-        model: original.deepseek ? 'deepseek-flash' : original.model,
-        deepseek: original.deepseek,
-        thinking: false,
-      );
+      final config = _auxiliaryModelConfig(job.originalConfig);
       final body = <String, Object?>{
         'messages': [
           {'role': 'system', 'content': director_core.directorSystemPrompt},
@@ -621,12 +776,14 @@ class _DirectorCoordinator {
         ],
         'stream': false,
         'max_tokens': 4096,
-        if (config.deepseek) 'thinking': {'type': 'disabled'},
-        'tools': [director_core.directToolDefinition(strict: config.deepseek)],
-        'tool_choice': {
-          'type': 'function',
-          'function': {'name': 'direct'},
-        },
+        if (config.deepseek) 'thinking': {'type': config.thinking ? 'enabled' : 'disabled'},
+        'tools': [_gameplayDirectToolDefinition(job.eventCapability, strict: config.deepseek)],
+        'tool_choice': config.deepseek && config.thinking
+            ? 'auto'
+            : {
+                'type': 'function',
+                'function': {'name': 'direct'},
+              },
       };
       final batch = await _receive(job, config, body);
       job.cancellation.check();
@@ -703,9 +860,10 @@ class _DirectorCoordinator {
     );
     StreamSubscription<ModelDelta>? subscription;
     try {
-      job.cancellation.check();
+      final cancellation = _gameplayRequestCancellation(engine, job.gameplayAdmission, job.cancellation);
+      cancellation.check();
       subscription = engine._modelClient
-          .generate(config: config, body: _copy(body), cancellation: job.cancellation)
+          .generate(config: config, body: _copy(body), cancellation: cancellation)
           .listen(
             (delta) {
               if (complete.isCompleted || job.cancellation.isCancelled) {
@@ -742,7 +900,7 @@ class _DirectorCoordinator {
             },
           );
       await complete.future;
-      job.cancellation.check();
+      cancellation.check();
       if (finishes != 1 || badTerminal) {
         throw const FormatException('Invalid director terminal sequence.');
       }
@@ -783,6 +941,7 @@ class _DirectorCoordinator {
       if (job.storyPhase != null) 'storyPhase': job.storyPhase,
       if (job.eventCapability != null) 'eventCapability': job.eventCapability,
       if (job.secretPolicy != null) 'secretPolicy': job.secretPolicy,
+      if (job.gameplay != null) 'effectiveConfigId': job.gameplay!.effectiveConfigId,
     };
     var record = StoredAgentRun(
       id: job.id,
@@ -815,10 +974,18 @@ class _DirectorCoordinator {
           result: raw,
         );
         engine._store.transaction(() {
+          if (output != null && failure == null) {
+            final admission = job.gameplayAdmission;
+            if (admission != null && !_gameplayAdmissionCurrent(engine, admission)) {
+              _gameplayCaptureConflict();
+            }
+            _ensureGameplayConfig(engine, job.gameplay);
+          }
           engine._store.writeAgentRun(record);
           if (output != null) {
             final events = _stateRows(output['events']);
             for (var i = 0; i < events.length; i++) {
+              final eventTarget = _gameplayPersistedEventTarget(job.eventCapability, events[i]['name']! as String);
               engine._store.writeAgentRun(
                 StoredAgentRun(
                   id: '${job.id}:event:$i',
@@ -834,6 +1001,7 @@ class _DirectorCoordinator {
                     // host defines no executable card event rules.
                     if (job.eventCapability != null || job.group != null) 'outputIndex': i,
                     'name': events[i]['name'], 'data': events[i]['data'],
+                    'eventTarget': ?eventTarget,
                   },
                 ),
               );
@@ -942,17 +1110,63 @@ class _DirectorCoordinator {
     unawaited(_changes.close());
   }
 
+  // Simulation waits for the finite work admitted by its real turn. This
+  // does not cancel a helper or prove its ignored transport cancel drained;
+  // the simulation's recording client owns that separate original Future.
+  Future<void> drainNaturally(String chatId) async {
+    while (true) {
+      final pending = <Future<void>>[
+        for (final job in _queues[chatId] ?? const <_DirectorJob>[]) job.done.future,
+        for (final entry in _preparations.entries)
+          if (entry.key.chatId == chatId) entry.value,
+      ];
+      if (pending.isEmpty) {
+        return;
+      }
+      await Future.wait(pending);
+    }
+  }
+
   Future<TavernDirectorSnapshot> read(String chatId) async {
-    final before = engine._store.chat(chatId);
-    final record = await engine._record(before.characterId);
-    // A read may await IO while close has begun. Check the lifecycle before
-    // querying saved rows or publishing a new watcher snapshot.
-    engine._ensureOpen();
-    final chat = engine._store.chat(chatId);
+    var chat = engine._store.chat(chatId);
+    Map<String, Object?>? readSaved() {
+      try {
+        return engine._stateAt(chatId, chat.currentLeafId);
+      } on StateError {
+        // An unreadable ancestry is unknown history, never an empty carrier.
+        return null;
+      }
+    }
+
+    var observedState = readSaved();
+    var observedHistory = observedState == null ? null : _gameplayHistoricalConfig(engine, observedState);
+    StoredCharacter? record;
+    if (observedHistory?.referenced != true) {
+      record = await engine._record(chat.characterId);
+      // A read may await IO while close has begun. Re-read the actual
+      // selection; a newly adopted reference must not fall back to that card.
+      engine._ensureOpen();
+      chat = engine._store.chat(chatId);
+      observedState = readSaved();
+      observedHistory = observedState == null ? null : _gameplayHistoricalConfig(engine, observedState);
+    }
+    final saved = observedState;
+    final historical = observedHistory;
+    final currentData = historical != null && !historical.referenced ? record?.card.data : null;
     final selection = engine._personas.resolve(personaId: chat.personaId);
-    final issues = <Map<String, Object?>>[...?_transientIssues[chatId]];
+    final issues = <Map<String, Object?>>[
+      ...?_transientIssues[chatId],
+      ...?historical?.issues,
+      if (saved == null) ...[
+        _directorIssue('director_source_unavailable'),
+        _directorIssue('director_story_snapshot_unavailable'),
+        _directorIssue('director_event_snapshot_unavailable'),
+      ],
+    ];
     final groupSelection = engine._store.agentRunsByKind(chatId, const {'group.selection'}, limit: 1).firstOrNull;
-    if (groupSelection != null) issues.addAll(_stateRows(groupSelection.result['issues']));
+    if (groupSelection != null) {
+      issues.addAll(_stateRows(groupSelection.result['issues']));
+    }
     Map<String, Object?>? readSettings() {
       try {
         return _personaSettings(engine._effectiveSettings(chat), selection);
@@ -986,19 +1200,23 @@ class _DirectorCoordinator {
     final attempt = _transient[chatId] ?? (storedAttempt?.id == storedSuccess?.id ? success : decode(storedAttempt));
     var stale = storedSuccess != null;
     if (success != null) {
-      final reason = record == null
+      // The saved definition contains no complete historical prose card.
+      // It can interpret the ledger, but cannot prove a helper's full input.
+      final reason = historical == null || historical.referenced
+          ? 'director_source_unavailable'
+          : currentData == null
           ? 'director_character_missing'
           : settings == null
           ? 'director_source_unavailable'
           : _eligibility(
               success,
               storedSuccess!,
-              _effectiveCard(record.card.data, settings),
+              _effectiveCard(currentData, settings),
               _directorPersona(selection, settings),
               chat.currentLeafId,
             );
       stale = reason != null;
-      if (reason != null) {
+      if (reason != null && saved != null) {
         issues.add(_directorIssue(reason, id: success.id));
       }
     }
@@ -1009,12 +1227,14 @@ class _DirectorCoordinator {
         if (job.chatId == chatId) job,
     };
     Map<String, Object?>? readSnapshot(String issue, Map<String, Object?>? Function(Map<String, Object?>) read) {
-      if (settings == null) {
+      if (settings == null && historical?.referenced != true) {
         issues.add(_directorIssue(issue));
         return null;
       }
       try {
-        return read(settings);
+        // A historical view can still expose its raw carrier and diagnostics.
+        // Missing current settings never grants automatic execution.
+        return read(settings ?? const {});
       } catch (_) {
         // An unavailable auxiliary view is not an empty or disabled ledger.
         // Keep the main source diagnosis and report this read failure apart.
@@ -1023,21 +1243,40 @@ class _DirectorCoordinator {
       }
     }
 
-    final story = record == null
+    final story = saved == null
+        ? null
+        : historical != null && historical.referenced
+        ? readSnapshot(
+            'director_story_snapshot_unavailable',
+            (settings) => _storySnapshot(engine, chat, const {}, settings),
+          )
+        : currentData == null
         ? null
         : readSnapshot(
             'director_story_snapshot_unavailable',
-            (settings) => _storySnapshot(engine, chat, _effectiveCard(record.card.data, settings), settings),
+            (settings) => _storySnapshot(engine, chat, _effectiveCard(currentData, settings), settings),
           );
-    final eventRules = record == null
+    final eventRules = saved == null
+        ? null
+        : historical != null && historical.referenced
+        ? readSnapshot('director_event_snapshot_unavailable', (settings) {
+            final config = historical.config;
+            if (config != null) {
+              return _cardEventSnapshot(engine, chat, const {}, settings, gameplay: config);
+            }
+            final leaf = chat.currentLeafId;
+            final own = leaf == null ? <String, Object?>{} : _map(engine._store.node(chat.id, leaf).extra['dshgo']);
+            return _unresolvedGameplayEventSnapshot(leaf, saved, own, historical.issues);
+          })
+        : currentData == null
         ? null
         : readSnapshot(
             'director_event_snapshot_unavailable',
-            (settings) => _cardEventSnapshot(engine, chat, _effectiveCard(record.card.data, settings), settings),
+            (settings) => _cardEventSnapshot(engine, chat, _effectiveCard(currentData, settings), settings),
           );
     return TavernDirectorSnapshot(
       chatId: chatId,
-      automaticEnabled: settings != null && _enabled(settings),
+      automaticEnabled: saved != null && settings != null && _enabled(settings),
       pendingJobs: owned.length,
       running: queue.any((job) => job.running),
       latestSuccess: success,
@@ -1054,25 +1293,28 @@ class _DirectorCoordinator {
     StoredAgentRun stored,
     Map<String, Object?> data,
     Map<String, Object?> persona,
-    String? contextNodeId,
-  ) {
+    String? contextNodeId, {
+    _GameplayRuntime? gameplay,
+  }) {
     try {
-      if (run.sourceKind == 'empty') {
-        if (contextNodeId != null) {
-          return 'director_source_not_on_path';
-        }
-      } else {
-        // Membership needs only a validated identity chain. Unrelated later
-        // bodies/extra JSON are not part of the original source fingerprint;
-        // the source itself is still read in full and authenticated below.
-        final path = engine._store.ancestorIds(run.chatId, contextNodeId);
-        if (!path.contains(run.sourceNodeId)) {
-          return 'director_source_not_on_path';
-        }
+      // Do not fetch a source, settings, secret proof or story state before
+      // the preceding gate: an unavailable later carrier is not an earlier
+      // path failure. Preview uses the same predicates on captured facts.
+      final path = run.sourceKind == 'empty' ? const <String>[] : engine._store.ancestorIds(run.chatId, contextNodeId);
+      final pathReason = _directorPathReason(run, contextNodeId, path);
+      if (pathReason != null) {
+        return pathReason;
       }
       final source = _directorSource(engine, run.chatId, run.sourceNodeId);
-      if (_directorSourceFingerprint(source, _directorCard(data), persona) != run.sourceFingerprint) {
-        return 'director_source_changed';
+      final sourceReason = _directorSourceReason(
+        run,
+        data,
+        persona,
+        source,
+        effectiveConfigId: gameplay?.effectiveConfigId,
+      );
+      if (sourceReason != null) {
+        return sourceReason;
       }
       final secretReason = _secretDirectorEligibility(
         engine,
@@ -1080,8 +1322,9 @@ class _DirectorCoordinator {
         data,
         engine._effectiveSettings(engine._store.chat(run.chatId)),
         contextNodeId,
+        gameplay: gameplay,
       );
-      return secretReason ?? _storyDirectorEligibility(engine, stored, data, contextNodeId);
+      return secretReason ?? _storyDirectorEligibility(engine, stored, data, contextNodeId, gameplay: gameplay);
     } catch (_) {
       return 'director_source_unavailable';
     }
@@ -1099,11 +1342,15 @@ class _DirectorCoordinator {
       // saved empty-chat variables that an empty-source director captured.
       final reason = run.sourceKind == 'empty' && turn.kind == _TurnKind.regenerate
           ? 'director_source_not_on_path'
-          : _eligibility(run, stored, data, _directorPersona(turn.personaSelection, turn.settings), parent);
-      final output = director_core.DirectOutput.parse(run.output!);
-      return _DirectorPrepared(stored, output, reason == null, [
-        if (reason != null) _directorIssue(reason, id: stored.id),
-      ], _directorAllowedReferences(stored));
+          : _eligibility(
+              run,
+              stored,
+              data,
+              _directorPersona(turn.personaSelection, turn.settings),
+              parent,
+              gameplay: turn.gameplay,
+            );
+      return _directorPreparation(stored, run, reason);
     } catch (_) {
       return _DirectorPrepared(stored, null, false, [
         _directorIssue('saved_director_run_unavailable', id: stored.id),
@@ -1121,48 +1368,57 @@ class _DirectorCoordinator {
       _event(stored),
   ];
 
-  TavernDirectorEvent _event(StoredAgentRun stored) {
-    try {
-      final raw = stored.result;
-      if (raw['version'] != 1 ||
-          raw['source'] != 'director' ||
-          raw['status'] != 'pending' ||
-          raw['runId'] is! String ||
-          raw['name'] is! String ||
-          raw['data'] is! String ||
-          raw['createdAt'] is! String ||
-          raw['sourceFingerprint'] is! String ||
-          (raw['sourceKind'] != 'node' && raw['sourceKind'] != 'empty') ||
-          (raw['sourceKind'] == 'node' ? raw['sourceNodeId'] is! String : raw['sourceNodeId'] != null)) {
-        throw const FormatException('Invalid saved director event.');
-      }
-      final name = raw['name']! as String;
-      final data = raw['data']! as String;
-      if (name.isEmpty ||
-          name.length > 1024 ||
-          utf8.encode(name).length > 1024 ||
-          data.length > 16 * 1024 ||
-          utf8.encode(data).length > 16 * 1024) {
-        throw const FormatException('Invalid saved director event text.');
-      }
-      return TavernDirectorEvent(
-        id: stored.id,
-        runId: raw['runId']! as String,
-        chatId: stored.chatId,
-        name: name,
-        data: data,
-        createdAt: DateTime.parse(raw['createdAt']! as String),
-        sourceKind: raw['sourceKind']! as String,
-        sourceNodeId: raw['sourceNodeId'] as String?,
-        sourceFingerprint: raw['sourceFingerprint']! as String,
-      );
-    } catch (_) {
-      return TavernDirectorEvent.unavailable(
-        id: stored.id,
-        chatId: stored.chatId,
-        reason: 'invalid_or_unsupported_saved_director_event',
-      );
+  TavernDirectorEvent _event(StoredAgentRun stored) => _directorEvent(stored);
+}
+
+_DirectorPrepared _directorPreparation(StoredAgentRun stored, TavernDirectorRun run, String? reason) {
+  final output = director_core.DirectOutput.parse(run.output!);
+  return _DirectorPrepared(stored, output, reason == null, [
+    if (reason != null) _directorIssue(reason, id: stored.id),
+  ], _directorAllowedReferences(stored));
+}
+
+TavernDirectorEvent _directorEvent(StoredAgentRun stored) {
+  try {
+    final raw = stored.result;
+    if (raw['version'] != 1 ||
+        raw['source'] != 'director' ||
+        raw['status'] != 'pending' ||
+        raw['runId'] is! String ||
+        raw['name'] is! String ||
+        raw['data'] is! String ||
+        raw['createdAt'] is! String ||
+        raw['sourceFingerprint'] is! String ||
+        (raw['sourceKind'] != 'node' && raw['sourceKind'] != 'empty') ||
+        (raw['sourceKind'] == 'node' ? raw['sourceNodeId'] is! String : raw['sourceNodeId'] != null)) {
+      throw const FormatException('Invalid saved director event.');
     }
+    final name = raw['name']! as String;
+    final data = raw['data']! as String;
+    if (name.isEmpty ||
+        name.length > 1024 ||
+        utf8.encode(name).length > 1024 ||
+        data.length > 16 * 1024 ||
+        utf8.encode(data).length > 16 * 1024) {
+      throw const FormatException('Invalid saved director event text.');
+    }
+    return TavernDirectorEvent(
+      id: stored.id,
+      runId: raw['runId']! as String,
+      chatId: stored.chatId,
+      name: name,
+      data: data,
+      createdAt: DateTime.parse(raw['createdAt']! as String),
+      sourceKind: raw['sourceKind']! as String,
+      sourceNodeId: raw['sourceNodeId'] as String?,
+      sourceFingerprint: raw['sourceFingerprint']! as String,
+    );
+  } catch (_) {
+    return TavernDirectorEvent.unavailable(
+      id: stored.id,
+      chatId: stored.chatId,
+      reason: 'invalid_or_unsupported_saved_director_event',
+    );
   }
 }
 
@@ -1172,11 +1428,17 @@ String _directorMemoryId(String chatId) => 'dshgo:memory:$chatId';
   TavernEngine engine,
   String chatId,
   DateTime at,
+) => _directorMemoryBookFromRows(chatId, at, engine._store.directorMemories(chatId));
+
+({WorldInfoBook? book, List<Map<String, Object?>> issues}) _directorMemoryBookFromRows(
+  String chatId,
+  DateTime at,
+  List<({String id, Map<String, Object?> entry, bool valid})> rows,
 ) {
   final entries = <String, Object?>{};
   final issues = <Map<String, Object?>>[];
   final id = _directorMemoryId(chatId);
-  for (final row in engine._store.directorMemories(chatId)) {
+  for (final row in rows) {
     if (!row.valid) {
       issues.add(_directorIssue('memory_json_unavailable', id: row.id));
       continue;
@@ -1214,6 +1476,49 @@ String _directorMemoryId(String chatId) => 'dshgo:memory:$chatId';
   );
 }
 
+({WorldInfoBook? book, Map<String, WorldInfoBook> owners, List<Map<String, Object?>> issues}) _rememberMemoryBook(
+  TavernEngine engine,
+  String chatId,
+  String? requestedLeafId,
+  List<WorldInfoBook> loaded,
+) {
+  final id = _rememberMemoryBookId(chatId, loaded);
+  return _rememberMemoryBookFromRows(id, engine._store.rememberMemories(chatId, requestedLeafId: requestedLeafId));
+}
+
+String _rememberMemoryBookId(String chatId, List<WorldInfoBook> loaded) {
+  final occupied = {for (final book in loaded) book.id};
+  final base = 'dshgo:remember:$chatId';
+  var id = base;
+  var suffix = 1;
+  while (occupied.contains(id)) {
+    id = '$base:${suffix++}';
+  }
+  return id;
+}
+
+({WorldInfoBook? book, Map<String, WorldInfoBook> owners, List<Map<String, Object?>> issues})
+_rememberMemoryBookFromRows(String id, List<StoredRememberMemory> rows) {
+  final entries = <String, Object?>{};
+  final issues = <Map<String, Object?>>[];
+  for (final row in rows) {
+    if (!row.available) {
+      issues.add({..._directorIssue('remember_unavailable', id: row.id), 'reason': row.unavailableReason});
+      continue;
+    }
+    entries[row.id] = {...row.entry, 'position': 0, 'uid': row.id, 'world': id};
+  }
+  if (entries.isEmpty) return (book: null, owners: const <String, WorldInfoBook>{}, issues: issues);
+  final book = WorldInfoBook.fromJson(
+    id: id,
+    source: WorldInfoSource.memory,
+    stWorldName: id,
+    json: {'name': 'Remembered facts', 'entries': entries},
+  );
+  // Only a real row projected into this exact book can own a memory reference.
+  return (book: book, owners: {for (final entry in book.entries) entry.uid: book}, issues: issues);
+}
+
 String _directorRefKey(Map<String, Object?> reference) {
   if (reference['kind'] == 'memory' && reference.length == 2 && reference['id'] is String) {
     return jsonEncode(['memory', reference['id']]);
@@ -1242,6 +1547,7 @@ Set<String> _directorAllowedReferences(StoredAgentRun stored) {
   String chatId, {
   required WorldInfoStrategy strategy,
   WorldInfoBook? memoryBook,
+  Map<String, WorldInfoBook> memoryOwners = const {},
 }) {
   final entries = worldInfoExecutionEntries(books, strategy: strategy);
   final counts = <WorldInfoEntryRef, int>{};
@@ -1269,7 +1575,7 @@ Set<String> _directorAllowedReferences(StoredAgentRun stored) {
       continue;
     }
     result.add({
-      'reference': identical(entry.book, memoryBook)
+      'reference': identical(entry.book, memoryBook) || identical(entry.book, memoryOwners[entry.uid])
           ? {'kind': 'memory', 'id': entry.uid}
           : {'kind': 'worldInfo', 'bookId': entry.book.id, 'uid': entry.uid},
       'title': entry.comment,
@@ -1286,14 +1592,55 @@ Set<String> _directorAllowedReferences(StoredAgentRun stored) {
   return (entries: result, issues: issues);
 }
 
-List<WorldInfoBook> _directorBooks(TavernEngine engine, _Turn turn, List<WorldInfoBook> loaded) {
+List<WorldInfoBook> _directorBooks(
+  TavernEngine engine,
+  _Turn turn,
+  List<WorldInfoBook> loaded, {
+  required String? requestedLeafId,
+}) {
   final prepared = turn.directorPrepared;
-  if (prepared == null || !prepared.eligible) {
-    return loaded;
+  // Legacy eligibility is unchanged. Remembered facts also participate in an
+  // ordinary turn with no eligible director result, using its actual branch.
+  final legacy = prepared != null && prepared.eligible
+      ? _directorMemoryBook(engine, turn.chat.id, turn.at)
+      : (book: null, issues: <Map<String, Object?>>[]);
+  final withLegacy = [...loaded, if (legacy.book != null) legacy.book!];
+  final remembered = _rememberMemoryBook(engine, turn.chat.id, requestedLeafId, withLegacy);
+  final result = _directorBooksPrepared(turn, loaded, legacy, remembered);
+  if (result.inspection case final inspection?) {
+    engine._setInspection(turn, inspection);
   }
-  final memory = _directorMemoryBook(engine, turn.chat.id, turn.at);
-  prepared.issues.addAll(memory.issues);
-  final books = [...loaded, if (memory.book != null) memory.book!];
+  return result.books;
+}
+
+({List<WorldInfoBook> books, TavernTurnInspection? inspection}) _directorBooksPrepared(
+  _Turn turn,
+  List<WorldInfoBook> loaded,
+  ({WorldInfoBook? book, List<Map<String, Object?>> issues}) legacy,
+  ({WorldInfoBook? book, Map<String, WorldInfoBook> owners, List<Map<String, Object?>> issues}) remembered,
+) {
+  final prepared = turn.directorPrepared;
+  final withLegacy = [...loaded, if (legacy.book != null) legacy.book!];
+  final books = [...withLegacy, if (remembered.book != null) remembered.book!];
+  TavernTurnInspection? inspection;
+  if (prepared != null) {
+    prepared.issues.addAll([...legacy.issues, ...remembered.issues]);
+  } else if (remembered.issues.isNotEmpty) {
+    inspection = turn.inspection.copyWith(
+      director: {
+        ...turn.inspection.director,
+        'remember': {'issues': remembered.issues},
+      },
+    );
+  }
+  if (prepared == null || !prepared.eligible) {
+    return (books: books, inspection: inspection);
+  }
+  final memoryOwners = <String, WorldInfoBook>{
+    if (legacy.book case final book?)
+      for (final entry in book.entries) entry.uid: book,
+    ...remembered.owners,
+  };
   final view = worldInfoExecutionEntries(
     books,
     strategy: WorldInfoSettings.fromJson(_map(turn.settings['worldInfo'])).strategy,
@@ -1310,12 +1657,20 @@ List<WorldInfoBook> _directorBooks(TavernEngine engine, _Turn turn, List<WorldIn
     final previous = seen[key];
     seen.putIfAbsent(key, () => index);
     final memoryReference = reference['kind'] == 'memory';
+    final memoryOwner = memoryReference ? memoryOwners[reference['id']] : null;
     final identity = memoryReference
-        ? (_directorMemoryId(turn.chat.id), reference['id']! as String)
+        ? (memoryOwner?.id ?? _directorMemoryId(turn.chat.id), reference['id']! as String)
         : (reference['bookId']! as String, reference['uid']! as String);
-    final matches = byIdentity[identity] ?? const <WorldInfoEntry>[];
+    final matches = memoryReference && memoryOwner == null
+        ? const <WorldInfoEntry>[]
+        : byIdentity[identity] ?? const <WorldInfoEntry>[];
     final inCatalog = prepared.allowed.contains(key);
-    final resolved = inCatalog && matches.length == 1 && identical(matches.single.book, memory.book) == memoryReference;
+    final resolved =
+        inCatalog &&
+        matches.length == 1 &&
+        (memoryReference
+            ? identical(matches.single.book, memoryOwner)
+            : !memoryOwners.values.any((book) => identical(matches.single.book, book)));
     final reason = !inCatalog
         ? 'not_in_sent_catalog'
         : matches.isEmpty
@@ -1342,7 +1697,7 @@ List<WorldInfoBook> _directorBooks(TavernEngine engine, _Turn turn, List<WorldIn
   if (loaded.any((book) => book.id == _directorMemoryId(turn.chat.id))) {
     prepared.issues.add(_directorIssue('memory_book_identity_collision'));
   }
-  return books;
+  return (books: books, inspection: inspection);
 }
 
 List<PromptInjection> _directorInjections(_Turn turn) {
@@ -1364,9 +1719,16 @@ List<PromptInjection> _directorInjections(_Turn turn) {
 }
 
 void _captureDirectorAssembly(TavernEngine engine, _Turn turn, PromptAssembly assembly, WorldInfoResult world) {
+  final inspection = _directorAssemblyInspection(turn, assembly, world);
+  if (inspection != null) {
+    engine._setInspection(turn, inspection);
+  }
+}
+
+TavernTurnInspection? _directorAssemblyInspection(_Turn turn, PromptAssembly assembly, WorldInfoResult world) {
   final prepared = turn.directorPrepared;
   if (prepared == null) {
-    return;
+    return null;
   }
   final observed = <WorldInfoEntryRef>{};
   var beatObserved = false;
@@ -1416,17 +1778,14 @@ void _captureDirectorAssembly(TavernEngine engine, _Turn turn, PromptAssembly as
       if (!retained) 'finalReason': 'source_not_observed_in_final_messages',
     });
   }
-  engine._setInspection(
-    turn,
-    turn.inspection.copyWith(
-      director: {
-        'version': 1,
-        'runId': prepared.stored.id,
-        'eligible': prepared.eligible,
-        'issues': prepared.issues,
-        'beat': {'offered': prepared.eligible && prepared.output!.beat.isNotEmpty, 'finalSourceObserved': beatObserved},
-        'prefetch': references,
-      },
-    ),
+  return turn.inspection.copyWith(
+    director: {
+      'version': 1,
+      'runId': prepared.stored.id,
+      'eligible': prepared.eligible,
+      'issues': prepared.issues,
+      'beat': {'offered': prepared.eligible && prepared.output!.beat.isNotEmpty, 'finalSourceObserved': beatObserved},
+      'prefetch': references,
+    },
   );
 }

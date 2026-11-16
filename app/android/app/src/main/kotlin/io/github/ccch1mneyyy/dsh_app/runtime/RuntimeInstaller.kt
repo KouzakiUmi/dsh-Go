@@ -48,6 +48,9 @@ class RuntimeInstaller(
 
     fun isCurrent(): Boolean = installedVersion() == manifest.runtimeVersion
 
+    /** A current runtime skips install(), but an interrupted final cleanup can still need this. */
+    fun cleanupCommittedUpgrade() = engineUpgrade.cleanupCommitted()
+
     /**
      * Extracts the bundled rootfs; [onProgress] gets (compressedBytesRead, totalCompressedBytes).
      * Fails with [KeepFailed] when what a reset kept cannot go back; [dropKept] then gives up

@@ -6,6 +6,8 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
+import '../../../voice/voice_platform_events.dart';
+
 /// What the phone can do.
 class VoiceCapabilities {
   const VoiceCapabilities({
@@ -13,6 +15,7 @@ class VoiceCapabilities {
     required this.recorder,
     this.systemUnreliable = false,
     this.environmentId,
+    this.languages = const [],
   });
 
   static const none = VoiceCapabilities(recognizer: false, recorder: false);
@@ -27,6 +30,9 @@ class VoiceCapabilities {
   /// A service failure remembered for this OS build and recognition service version.
   final bool systemUnreliable;
   final String? environmentId;
+
+  /// What the system's recogniser takes, where the native side says (HarmonyOS).
+  final List<String> languages;
 }
 
 enum VoicePermission { granted, denied, blocked }
@@ -109,7 +115,6 @@ abstract class VoiceBridge {
 
 class MethodChannelVoiceBridge implements VoiceBridge {
   static const _methods = MethodChannel('dsh/voice');
-  static const _events = EventChannel('dsh/voice/events');
 
   Stream<VoiceEvent>? _stream;
   static int _nextSession = 0;
@@ -124,6 +129,10 @@ class MethodChannelVoiceBridge implements VoiceBridge {
         recorder: map?['recorder'] == true,
         systemUnreliable: map?['systemUnreliable'] == true,
         environmentId: map?['environmentId'] as String?,
+        languages: [
+          for (final language in map?['languages'] as List<Object?>? ?? const [])
+            if (language is String) language,
+        ],
       );
     } on MissingPluginException {
       return VoiceCapabilities.none;
@@ -152,12 +161,10 @@ class MethodChannelVoiceBridge implements VoiceBridge {
   }
 
   @override
-  Stream<VoiceEvent> get events => _stream ??= _events
-      .receiveBroadcastStream()
+  Stream<VoiceEvent> get events => _stream ??= voicePlatformEvents
       .map(_decode)
       .where((e) => e != null)
-      .cast<VoiceEvent>()
-      .asBroadcastStream();
+      .cast<VoiceEvent>();
 
   VoiceEvent? _decode(Object? raw) {
     if (raw is! Map || raw['sessionId'] != _session) return null;

@@ -200,13 +200,11 @@ class FakePhoneNative {
   Future<Map<String, Object?>> Function(Map<String, Object?>)? onPresentPrompt;
 
   /// Gate cleanup's asynchronous native response, without rerunning a probe.
-  Future<Map<String, Object?>> Function(Map<String, Object?>)? onRetryGateCleanup;
-
   Future<bool> Function(String)? onAcknowledgeInterruption;
   Future<bool> Function()? onRetryInterruption;
 
   /// The 悬浮条 settings as the native side keeps them.
-  Map<String, Object?> overlay = {'idleOpacity': 0.7, 'autoCollapse': false};
+  Map<String, Object?> overlay = {'idleOpacity': 0.7, 'autoCollapse': true};
 
   /// Replies for `{ok, reason}` methods, by method name (default ok).
   final results = <String, Map<String, Object?>>{};
@@ -287,8 +285,6 @@ class FakePhoneNative {
           }}};
         }
         return capacityResult;
-      case 'retryBackgroundGateCleanup':
-        return onRetryGateCleanup?.call(args) ?? results[call.method] ?? {'ok': false};
       case 'setBackgroundMode':
         final r = results[call.method] ?? {'ok': true};
         if (r['ok'] == true) {

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/l10n.dart';
 import '../performance/performance_state.dart';
+import '../secrets/secure_storage.dart';
 import 'provider_keys.dart';
 import 'read_list_epoch.dart';
 
@@ -18,6 +18,7 @@ class AppSettings {
     this.autoStartLocal = true,
     this.autoStartLocalExplicit = true,
     this.autoApproveCommands = false,
+    this.automaticDiagnostics = false,
     this.phoneStorage = false,
     this.webPhoneLayout = true,
     this.chatSuggestions = true,
@@ -41,6 +42,9 @@ class AppSettings {
   /// New local sessions use DSH's `danger-full-access` preset (commands run without asking).
   /// Off by default: there is no sandbox on Android, so each command escalation asks first.
   final bool autoApproveCommands;
+
+  /// Explicit opt-in to sending content-free local failure facts to the model.
+  final bool automaticDiagnostics;
 
   /// Mount the phone's shared storage at /sdcard in the Linux environment.
   final bool phoneStorage;
@@ -85,6 +89,7 @@ class AppSettings {
     bool? autoStartLocal,
     bool? autoStartLocalExplicit,
     bool? autoApproveCommands,
+    bool? automaticDiagnostics,
     bool? phoneStorage,
     bool? webPhoneLayout,
     bool? chatSuggestions,
@@ -100,6 +105,7 @@ class AppSettings {
     autoStartLocal: autoStartLocal ?? this.autoStartLocal,
     autoStartLocalExplicit: autoStartLocalExplicit ?? this.autoStartLocalExplicit,
     autoApproveCommands: autoApproveCommands ?? this.autoApproveCommands,
+    automaticDiagnostics: automaticDiagnostics ?? this.automaticDiagnostics,
     phoneStorage: phoneStorage ?? this.phoneStorage,
     webPhoneLayout: webPhoneLayout ?? this.webPhoneLayout,
     chatSuggestions: chatSuggestions ?? this.chatSuggestions,
@@ -125,6 +131,7 @@ class SettingsController extends Notifier<AppSettings> {
   static const _themeKey = 'theme_mode';
   static const _autoStartKey = 'auto_start_local';
   static const _autoApproveKey = 'auto_approve_commands';
+  static const _automaticDiagnosticsKey = 'automatic_diagnostics';
   static const _phoneStorageKey = 'phone_storage';
   static const _webPhoneLayoutKey = 'web_phone_layout';
   static const _chatSuggestionsKey = 'chat_suggestions';
@@ -132,7 +139,7 @@ class SettingsController extends Notifier<AppSettings> {
   static const _chatTextScaleKey = 'chat_text_scale';
   static const _foldTurnsKey = 'fold_completed_turns';
   static const _visualRepliesKey = 'visual_replies';
-  static const _secure = FlutterSecureStorage();
+  static const _secure = AppSecureStorage();
   late Future<void> _loaded;
 
   @override
@@ -172,6 +179,7 @@ class SettingsController extends Notifier<AppSettings> {
       autoStartLocal: prefs.getBool(_autoStartKey) ?? ref.read(performanceDefaultsProvider).autoStartLocal,
       autoStartLocalExplicit: prefs.containsKey(_autoStartKey),
       autoApproveCommands: prefs.getBool(_autoApproveKey) ?? false,
+      automaticDiagnostics: prefs.getBool(_automaticDiagnosticsKey) ?? false,
       phoneStorage: prefs.getBool(_phoneStorageKey) ?? false,
       webPhoneLayout: prefs.getBool(_webPhoneLayoutKey) ?? true,
       chatSuggestions: prefs.getBool(_chatSuggestionsKey) ?? true,
@@ -182,6 +190,24 @@ class SettingsController extends Notifier<AppSettings> {
       customProviderIds: providerIds,
       loaded: true,
     );
+  }
+
+  /// Takes the keys in again once the saved credentials were cleared
+  /// (credential_recovery.dart). Only the keys: invalidating this provider would
+  /// drop [AppSettings.loaded] and the whole app back to the splash.
+  Future<void> reloadCredentials() async {
+    await _loaded;
+    if (!ref.mounted) return;
+    var apiKey = '';
+    var providerIds = const <String>{};
+    try {
+      apiKey = await _secure.read(key: _apiKeyKey) ?? '';
+      providerIds = (await ref.read(providerKeyVaultProvider).readAll()).keys.toSet();
+    } catch (_) {
+      // As in [_load]: the user can re-enter them.
+    }
+    if (!ref.mounted) return;
+    state = state.copyWith(apiKey: apiKey, customProviderIds: providerIds);
   }
 
   /// Keeps [key] for the local engine's custom provider [id] (see
@@ -219,6 +245,24 @@ class SettingsController extends Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoApproveKey, value);
     state = state.copyWith(autoApproveCommands: value);
+  }
+
+  Future<void> setAutomaticDiagnostics(bool value) async {
+    await _loaded;
+    if (!ref.mounted) return;
+    // Revocation is immediate; enabling must not start a paid request before
+    // its opt-in is durably saved. Storage exceptions fail closed too.
+    if (!value) state = state.copyWith(automaticDiagnostics: false);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!await prefs.setBool(_automaticDiagnosticsKey, value)) {
+        throw StateError('automatic_diagnostics_store_failed');
+      }
+      if (ref.mounted && value) state = state.copyWith(automaticDiagnostics: true);
+    } catch (_) {
+      if (ref.mounted) state = state.copyWith(automaticDiagnostics: false);
+      rethrow;
+    }
   }
 
   Future<void> setPhoneStorage(bool value) async {

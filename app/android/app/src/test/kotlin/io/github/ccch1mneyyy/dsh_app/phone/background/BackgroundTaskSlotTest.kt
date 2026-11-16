@@ -172,6 +172,31 @@ class BackgroundTaskSlotTest {
         assertNotNull(slot.acquire(current, peer, 3, { tasks.isCurrent(current) }) { Any() })
     }
 
+    @Test fun aDiscardedPeerTakesItsOtherRecordsOutSoANewTaskGetsTheNewChannel() {
+        val slot = BackgroundTaskSlot<BackgroundDisplayIo<Any>, Any>(Any()); val peer = Any(); val nextPeer = Any()
+        val a = begin(task(1L)); val b = begin(task(2L)); val c = begin(task(3L))
+        val first = slot.acquire(a, peer, 3, { true }) { BackgroundDisplayIo() }!!
+        val second = slot.acquire(b, peer, 3, { true }) { BackgroundDisplayIo() }!!
+        first.driver.call { first.driver.startResource(peer, { commit -> commit(); true }) { it } }
+        second.driver.call { second.driver.startResource(peer, { commit -> commit(); true }) { it } }
+        // A ends and its release is not confirmed: BackgroundControl.endTask discards the peer.
+        assertSame(first, slot.seal(a.taskId).singleOrNull())
+        first.driver.seal()
+        assertFalse(first.driver.release { false })
+        val evicted = slot.evict(peer)
+        evicted.forEach { it.driver.seal() }
+        assertEquals(listOf(first, second), evicted)
+        assertFalse(slot.complete(first)) // Already out; endTask's own complete is a no-op.
+        assertFalse(slot.occupied)
+        assertNull(slot.boundPeer)
+        assertNull(slot.find(b))
+        // B's worker fails its next call with the usual stop error instead of using the dead screen.
+        assertEquals("Background resource admission was stopped",
+            assertThrows(IllegalStateException::class.java) { second.driver.call { } }.message)
+        assertNotNull(slot.acquire(c, nextPeer, 3, { true }) { BackgroundDisplayIo() })
+        assertSame(nextPeer, slot.boundPeer)
+    }
+
     @Test fun batchSealRetainsEachFailedOriginalWithoutRetainingACompletedSibling() {
         val slot = BackgroundTaskSlot<BackgroundDisplayIo<Any>, Any>(Any()); val peer = Any()
         val aTasks = task(1L); val bTasks = task(2L)

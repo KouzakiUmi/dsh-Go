@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/l10n.dart';
 import '../../state/adaptive_layout_state.dart';
 import '../../state/agents_state.dart';
+import '../../state/app_notes.dart';
 import '../../state/chat_state.dart';
 import '../../state/session_detail_state.dart';
 import '../../state/usage_state.dart';
@@ -20,6 +21,7 @@ import '../chat/chat_header.dart';
 import '../chat/diff_page.dart';
 import '../chat/run_info.dart';
 import '../chat/step_detail_page.dart';
+import '../chat/tool_view.dart' show PhoneResultText;
 import '../chat/trajectory_sheet.dart';
 import '../chat/turn_summary.dart';
 import '../chat/usage_sheet.dart';
@@ -416,9 +418,7 @@ class _SessionDetailPageState extends ConsumerState<SessionDetailPage> with Tick
           padding: EdgeInsets.symmetric(horizontal: gutter - 16 + column),
           child: TabBarView(
             controller: _controller,
-            children: [
-              for (final tab in _tabs) ConversationPane.ofTab(tab).build(id),
-            ],
+            children: [for (final tab in _tabs) ConversationPane.ofTab(tab).build(id)],
           ),
         ),
       ),
@@ -602,6 +602,11 @@ class GlassSegments extends StatelessWidget {
   final TabController controller;
   final List<String> labels;
 
+  void _select(int i) {
+    if (controller.index != i) HapticFeedback.selectionClick();
+    controller.animateTo(i);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -658,14 +663,11 @@ class GlassSegments extends StatelessWidget {
                                 inMutuallyExclusiveGroup: true,
                                 label: label,
                                 excludeSemantics: true,
+                                // A screen reader's tap, as the finger's below.
+                                onTap: () => _select(i),
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
-                                  onTap: () {
-                                    if (controller.index != i) {
-                                      HapticFeedback.selectionClick();
-                                    }
-                                    controller.animateTo(i);
-                                  },
+                                  onTap: () => _select(i),
                                   child: Center(
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -790,7 +792,7 @@ class TrajectoryTab extends ConsumerWidget {
     String? promptOf(TurnTrace trace) {
       for (final p in prompts) {
         if (p.seq >= trace.startSeq && (trace.endSeq == null || p.seq <= trace.endSeq!)) {
-          return p.text;
+          return withoutAppNotes(p.text);
         }
       }
       return null;
@@ -1409,6 +1411,7 @@ class SubagentsTab extends ConsumerWidget {
                       final span = spanOf(call.callId);
                       final turn = turnOf(call.callId);
                       final status = switch (call.status) {
+                        _ when view.phoneResult != null => view.phoneResult!.word,
                         ToolStatus.succeeded => l10n.commonCompleted,
                         ToolStatus.failed => l10n.commonFailed,
                         ToolStatus.cancelled => l10n.commonCancelled,
@@ -1424,7 +1427,9 @@ class SubagentsTab extends ConsumerWidget {
                           if (span?.duration case final d?) formatSpan(d),
                           if (turn != null) l10n.hubSessionTurn(turn),
                         ].join(' · '),
-                        subtitleColor: call.status == ToolStatus.failed ? dsh.danger : null,
+                        subtitleColor: call.status == ToolStatus.failed && (view.phoneResult?.isFault ?? true)
+                            ? dsh.danger
+                            : null,
                         chevron: span != null && turn != null,
                         onTap: span == null || turn == null
                             ? null

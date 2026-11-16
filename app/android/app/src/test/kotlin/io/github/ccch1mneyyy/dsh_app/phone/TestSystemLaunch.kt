@@ -5,4 +5,5 @@ internal class TestSystemLaunch(
     override val target: SystemTarget,
     val kind: String = "app",
     val spec: IntentSpec? = null,
+    override val packageName: String? = null,
 ) : SystemLaunch

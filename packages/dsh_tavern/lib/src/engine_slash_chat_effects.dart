@@ -116,7 +116,7 @@ extension _SlashChatEffects on _ScriptCoordinator {
     try {
       final result = await scope.drain(
         _bridgeOperation(() {
-          T action() {
+          T action(_ToolPreparationPermit? permit) {
             scope.checkAlive();
             _checkSlashChatAdmission(owner, admission);
             _checkChatCapture(
@@ -134,7 +134,9 @@ extension _SlashChatEffects on _ScriptCoordinator {
               target: target,
               details: const {'carrier': 'sql'},
             );
-            return engine._store.transaction(
+            return _toolPreparationSql(
+              engine,
+              permit,
               () {
                 plan = _ScriptMessagePlan(this, admission.capture, operation, const TavernScriptWriteOptions());
                 prepare(plan);
@@ -163,7 +165,9 @@ extension _SlashChatEffects on _ScriptCoordinator {
             );
           }
 
-          return structural ? _structureWrite(admission.capture, action) : _dataWrite(admission.capture, action);
+          return structural
+              ? _structureWrite(admission.capture, () => action(null))
+              : _dataWrite(admission.capture, action);
         }),
       );
       scope.checkAlive();
@@ -218,7 +222,13 @@ extension _SlashChatEffects on _ScriptCoordinator {
     }
     final capturedExtra = _captureScriptObject(extra);
     _checkUserExtra(owner.context.value.id, 'createSlashMessage', capturedExtra, '/extra');
-    final data = await owner.storage(_bridgeOperation(() => _prepareDataContext(admission.capture.chatId)));
+    final capturedParent = insertion == 0 ? null : admission.capture.path[insertion - 1].message.nodeId;
+    final forceGameplay = engine
+        ._stateAt(admission.capture.chatId, capturedParent)
+        .containsKey('dshgoPackDefinitionConfigId');
+    final data = await owner.storage(
+      _bridgeOperation(() => _prepareDataContext(admission.capture.chatId, forceGameplay: forceGameplay)),
+    );
     final id = engine._store.newNodeId();
     final ref = _scriptRef(admission.capture.chatId, id);
     return _runSlashMessagePlan(
@@ -237,7 +247,11 @@ extension _SlashChatEffects on _ScriptCoordinator {
         final before = insertion < oldPath.length ? oldPath[insertion] : null;
         final oldFamily = before == null ? <String>[] : plan.children(plan.links[before]!.parentId, physical: true);
         final parent = insertion == 0 ? null : oldPath[insertion - 1];
-        final baseline = parent == null ? _initialMessageState(data) : _copy(plan.page(parent).state);
+        final initial = parent == null ? _initialMessageState(data) : null;
+        final baseline = initial?.state ?? _copy(plan.page(parent!).state);
+        if (initial != null && initial.adoptedGameplay != null) {
+          plan.initialized[id] = initial;
+        }
         plan.add(
           _ScriptWorkingPage(
             id: id,
@@ -374,7 +388,7 @@ extension _SlashChatEffects on _ScriptCoordinator {
     try {
       final value = await scope.drain(
         _bridgeOperation(
-          () => _scriptEffectChatWrite(chatId, () {
+          () => _scriptEffectChatWrite(chatId, (permit) {
             scope.checkAlive();
             _checkSlashChatAdmission(owner, admission);
             for (final entry in versions.entries) {
@@ -425,7 +439,9 @@ extension _SlashChatEffects on _ScriptCoordinator {
               target: capturedTarget,
               details: const {'carrier': 'sql'},
             );
-            return engine._store.transaction(
+            return _toolPreparationSql(
+              engine,
+              permit,
               () {
                 engine._store.updateChat(chatId, metadata: root, settings: settings);
                 final raw = metadata['script_injects'];
@@ -485,7 +501,7 @@ extension _SlashChatEffects on _ScriptCoordinator {
                 }
               },
             );
-          }),
+          }, metadataOnly: true),
         ),
       );
       scope.checkAlive();

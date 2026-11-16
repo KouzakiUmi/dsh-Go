@@ -1,4 +1,6 @@
-// Portions derived from Phase (https://github.com/CikeSeven/phase), used with the author's permission. See THIRD_PARTY_NOTICES.md.
+// SPDX-FileCopyrightText: 2026 CikeSeven
+// SPDX-License-Identifier: MIT
+// See THIRD_PARTY_NOTICES.md.
 package io.github.ccch1mneyyy.dsh_app.phone.background
 
 import android.os.Bundle
@@ -16,20 +18,8 @@ object Proto {
     const val REPLAY_NAVIGATION = "replayNavigation"
     const val OP_REPLAY_NAVIGATION = "replayNavigation"
     const val NAVIGATION = "navigation"
-    const val REVISION = "dsh-vdisplay-2"
-    const val RESOURCE_RECOVERY_VERSION = "resourceRecoveryVersion"
-    const val RECOVERY_PEER = "recoveryPeer"
-    const val RECOVERY_BOOT = "recoveryBoot"
-    const val RECOVERY_PID = "recoveryPid"
-    const val RECOVERY_UID = "recoveryUid"
-    const val RECOVERY_PID_NS_DEV = "recoveryPidNsDev"
-    const val RECOVERY_PID_NS_INO = "recoveryPidNsIno"
-    const val RECOVERY_PID_NS_AVAILABLE = "recoveryPidNsAvailable"
-    const val ALLOCATION_PURPOSE = "allocationPurpose"
-    const val RECOVERY_KIND = "recoveryKind"
-    const val OP_ALLOCATE = "allocate"
-    const val OP_RECOVERY_RETIRE = "recoveryRetire"
-    const val OP_RECOVERY_CHECK = "recoveryCheck"
+    // A running service whose revision differs is refused at connect and replaced (see the starters).
+    const val REVISION = "dsh-vdisplay-4"
 
     // request keys
     const val OP = "op"
@@ -137,7 +127,6 @@ object Proto {
     const val TASK_SCOPE_EMPTY = "taskScopeEmpty"
     const val OP_RELEASE = "release"
     const val OP_DESTROY = "destroy"
-    const val OP_GATE = "gate"
     const val OP_COLLECT_SYSTEM_IME = "collectSystemIme"
     const val IME_PID = "imePid"
     const val IME_REQUESTED_AT = "imeRequestedAt"
@@ -167,6 +156,10 @@ object Proto {
     const val IMAGE_OMITTED = "imageOmitted"
     const val APP_LABEL = "appLabel"
     const val FG_PKG = "foregroundPkg"
+    // The app the task opened (request), and where it is when it is not the one on top (reply:
+    // a TargetIdentity.Placement wire value).
+    const val OPENED_PKG = "openedPkg"
+    const val SHOWN_NOTE = "shownNote"
     const val ACCEPTED = "accepted"
     const val READBACK = "readback"
     const val COUNT = "n"
@@ -223,8 +216,6 @@ object Reasons {
         // l10n:keep agent resource protocol
         "scopeBusy", "scopeCapacity" -> "后台资源正在占用或清理，请等待原任务收尾后再开始"
         // l10n:keep agent resource protocol
-        "scopeHistoryFull" -> "本次后台服务已保留256个任务的收尾记录，请先清理全部任务，再关闭通道并重新选择；不会自动重启"
-        // l10n:keep agent resource protocol
         "scopeModeMismatch" -> "后台服务仍采用原兼容模式，请先清理并关闭通道，再显式重新连接"
         // l10n:keep agent resource protocol
         "scopeIdentityUnavailable" -> "后台回复归属未确认，请保留原任务并尝试清理，不要重发动作"
@@ -246,6 +237,8 @@ object Reasons {
         // l10n:keep privileged protocol
         "notLaunchable" -> "此应用没有可启动的界面"
         // l10n:keep privileged protocol
+        "launchUnconfirmed" -> "已请求在后台屏打开，但 4 秒内后台屏上没有出现应用界面；可以重新读后台屏确认，或再打开一次"
+        // l10n:keep privileged protocol
         "displayUnsupported" -> "此系统不支持所需的独立焦点虚拟屏，未改用主屏"
         // l10n:keep privileged protocol
         "displayReleaseFailed" -> "未收到后台屏资源释放的完整回执"
@@ -259,6 +252,10 @@ object Reasons {
         "targetIdentityChanged" -> "目标应用身份已变化，已停止后续操作。先重新打开应用或结束任务；不要自动重复刚才的输入或动作"
         // l10n:keep agent target identity
         "targetIdentityUnavailable" -> "无法确认目标应用身份，已停止后续操作。先重新打开应用或结束任务；先前动作是否完成需核对，不要自动重试"
+        // l10n:keep agent target identity
+        "foregroundChanged" -> "后台屏上的应用已经换了，这次没有执行。请先重新读后台屏，按新界面再操作"
+        // l10n:keep agent target identity
+        "targetLeftDisplay" -> "应用离开了后台屏，现在在主屏上（它可能已在主屏运行，或不支持在后台屏运行）。可以改在主屏操作，或请用户先在主屏关掉这个应用后再打开"
         // l10n:keep privileged protocol
         "secureWindow" -> "此页面受保护（支付或密码），请交还用户在主屏完成"
         // l10n:keep privileged protocol

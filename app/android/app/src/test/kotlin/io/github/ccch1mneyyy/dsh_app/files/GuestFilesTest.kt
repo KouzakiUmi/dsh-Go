@@ -45,6 +45,28 @@ class GuestFilesTest {
         assertResolved(image, "/root/workspace/image.png")
     }
 
+    @Test fun physicalRootfsInputsResolveWithEitherRootSpelling() {
+        val image = file("root/workspace/generated/image.png")
+        val alias = rootAlias()
+
+        assertResolved(image, image.absolutePath)
+        assertResolved(image, image.canonicalPath, alias)
+        assertResolved(image, File(alias, "root/workspace/generated/image.png").absolutePath, alias)
+        assertNull(resolve(root.absolutePath))
+    }
+
+    @Test fun physicalRootfsInputsStillFollowGuestLinksAndTawcTokens() {
+        val image = file("root/images/image.png")
+        link("root/workspace/images", "/root/images")
+        assertResolved(image, File(root, "root/workspace/images/image.png").absolutePath)
+
+        val stored = File(objects, "123").apply { writeText("stored image") }
+        link("root/workspace/stored.png", "tawcroot:link:123")
+        val path = File(root, "root/workspace/stored.png").absolutePath
+        assertResolved(stored, path)
+        assertNull(resolve("$path/child"))
+    }
+
     @Test fun twoHostAbsoluteL2sHopsResolveToTheStoredRegularFile() {
         val actual = file("root/.l2s/slot.0002")
         val slot = File(root, "root/.l2s/slot")
@@ -106,6 +128,7 @@ class GuestFilesTest {
             }
             link("root/workspace/sibling$index.png", outside.absolutePath)
             assertNull(outside.path, resolve("/root/workspace/sibling$index.png", alias))
+            assertNull(outside.path, resolve(outside.absolutePath, alias))
         }
     }
 

@@ -17,6 +17,18 @@ To report a problem, export a diagnostics bundle here. It includes the version, 
 
 To let the AI look into it, tap **Let the AI read diagnostics**. The app writes a bounded snapshot for the local engine, then ask the AI to "check the diagnostics". The bundled `dsh-go-support` skill walks the symptoms and drafts an issue you can paste.
 
+### Crashes and automatic failure analysis
+
+The app keeps bounded local records of error categories, a few app/framework source locations and voice stages, without exception bodies, recordings or chat content. On Android 11 and later it also attempts to read this app's historical process-exit reasons. Missing or empty system records do not prove there was no failure, and are not complete crash stacks.
+
+In an ordinary local chat, ask the AI to check the recent crash. Supported versions expose a diagnostics tool that refreshes and reads individual sections, without a manual export, enabling Phone control or granting accessibility. In Safe mode or with an older runtime, the published snapshot remains the fallback; export only if more evidence is needed.
+
+**Automatic failure analysis** is off by default. Enabling it explains that, after a failure and only while the app is foregrounded and connected to the working local engine, allowlisted versions, device/system facts, error categories, source locations, voice stages and exit reasons are sent to the model provider configured on that engine. Model charges may apply. Chat bodies, recordings, credentials, raw logs and system input-method evidence are excluded. After an app crash, analysis must wait until the app is reopened and connected.
+
+Analysis uses a separate tool-free conversation, without switching your current chat, performing repairs or publishing to GitHub. Matching failures are grouped; failed or ambiguous attempts are not retried automatically. Check its status here and tap the report entry to read the analysis. Disabling it, switching to a remote host or backgrounding the app prevents new requests and attempts to stop ongoing analysis; sent data and generated conversations cannot be retracted.
+
+If local analysis records cannot be read or saved, automatic analysis pauses and a recovery entry appears. Recovery is local only: it baselines already retained failures without resending old requests, then resumes handling future failures after a successful save. Failed recovery remains paused and is not retried in a loop.
+
 ### Input-method or keyboard problems
 
 After reproducing the problem, use **Capture recent events** under **System input-method diagnostics**, read the native prompt and confirm it yourself. It only reuses an already selected and connected Shizuku, Sui, wireless-debugging or Root channel; it does not request permissions, open a background screen or operate an editor. With no channel available, **Phone-control permissions (optional)** lets you choose whether to configure one.
@@ -68,7 +80,7 @@ If a task stopped midway: turning the screen off, locking the phone, or DSH maki
 
 ## The floating bar is in the way
 
-Tap the dot at the bar's left end (or **Shrink to a ball** in its card) to shrink it to a ball you can drag out of the way, or turn on **Collapse when idle** on the phone control page. The capsule and the ball fade when idle; lower **Idle opacity** to fade them more.
+Hold and drag the bar out of the way (left, middle or right, at any height), or drag it off the screen's edge to shrink it to a ball; tapping the dot at its left end (or **Shrink to a ball** in its card) does that too. **Collapse when idle** is on by default, so an idle capsule shrinks to a ball by itself; an idle ball fades and slides half out of sight over the edge. Lower **Idle opacity** to fade it more.
 
 ## The pet is gone
 
@@ -86,9 +98,9 @@ Check that the plugin is enabled, and restart the engine if asked. A plugin's na
 <!-- nav: commonSettings,hubPrivacy,usageStatsTitle -->
 `Settings › Privacy and sharing › Send anonymous usage stats` · [Open](dshgo://open/usage-stats)
 
-dsh-go’s own anonymous usage statistics are on by default; the switch is on the welcome screen the first time you open the app. If you updated from an earlier version, a one-time notice at the bottom of the home screen tells you, and can turn it off right there. While it's on, the app sends anonymous stats for the days before, at most once a day, and only this: app and Android version, CPU architecture, phone maker and model (such as `V2405A`, from 1.0.15), the maker's system and its version (such as OriginOS 5.0, from 1.0.15), app language, how the local engine was started, and that day's number of messages, voice inputs, phone control tasks, generations, shares and installed plugins. Devices are told apart by a random ID that changes every 90 days.
+dsh-go’s own anonymous usage statistics are on by default; the switch is on the welcome screen the first time you open the app. If you updated from an earlier version, a one-time notice at the bottom of the home screen tells you, and can turn it off right there. While it's on, the app sends anonymous stats for the days before, at most once a day, and only this: app and Android version, CPU architecture, phone maker and model (such as `V2405A`, from 1.0.15), the maker's system and its version (such as OriginOS 5.0, from 1.0.15), app language, how the local engine was started, and that day's number of messages, voice inputs (speech typed into the message box, not voice calls), phone control tasks, generations, shares and installed plugins. From 1.0.17 also: messages sent in the tavern, visits to the companion room, voice calls that connected, and the day's total input and output tokens that model replies reported (only the numbers the provider gives in its replies; channels that give none are not counted, and nothing is estimated). Devices are told apart by a random ID that changes every 90 days.
 
-These statistics never include accounts, API keys, chats, files, prompts or host addresses, or device identifiers such as phone number or IMEI. Turning this switch off stops these dsh-go statistics; the random ID and the counts kept on the phone are deleted at once.
+These statistics never include accounts, API keys, chats, character cards, files, prompts, host addresses or which model you use, or device identifiers such as phone number or IMEI. Turning this switch off stops these dsh-go statistics; the random ID and the counts kept on the phone are deleted at once.
 
 ## Local text recognition and Google ML Kit
 

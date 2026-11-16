@@ -83,7 +83,7 @@ versionCode = (年 - 2026) × 10^8 + MMDDhhmm      时钟固定按 UTC+8
    tooling/build-apk.sh
    ```
 
-   脚本顺带传 `DSH_APP_VERSION=<版本名>+<构建号>`，它只影响诊断信息里的版本（`lib/state/app_info.dart` 是编译期常量）；更新检查读的是系统里真实的 versionName / versionCode，不依赖它。
+   脚本顺带传 `DSH_APP_VERSION=<版本名>+<构建号>`（`app/lib/state/app_info.dart`），作为诊断信息和更新状态的编译期默认版本。设置和关于页读取更新状态中的版本；原生版本读取成功且版本名可解析时，更新状态改用系统提供的 `versionName` / `versionCode`，读取失败或版本名无法解析时保留默认值。
 
    **公测起**（GitHub Release 和公开渠道的包）打开求 star 提示，内测包不加：
 
@@ -134,7 +134,7 @@ CF_TOKEN_FILE=<token 文件> scripts/beta-keys.sh add beta-1 --out <文件>   # 
 **每次发内测版**：
 
 1. 改版本名（`app/pubspec.yaml`）并同步使用说明（同上「发版步骤」第 1 步，`guide_sync.py --check` 通过），在 `docs/changelog.md` 写好 `## X.Y.Z · 日期`，下面 `### 中文`、`### English` 两节——页面和 App 弹窗的更新说明从这里取，缺一节脚本就停。
-2. 打包：`tooling/build-apk.sh`（arm64）。第一行要带 `· beta channel`，说明令牌已编进去；没有令牌文件、或 `--debug` / `--profile` 的包都不带，它们只查 GitHub。
+2. 打包：`tooling/build-apk.sh --beta`（arm64）。须有非空的通道令牌文件，缺失时脚本报错。第一行要带 `· beta channel`，说明令牌已编进去；`--debug` / `--profile` 不带通道令牌，不走内测通道。
 3. 确认签名（同上第 3 步），生成资产：`python3 tooling/release_assets.py`，产物在 `dist/`。
 4. 上传并实测：
 
@@ -156,7 +156,7 @@ CF_TOKEN_FILE=<token 文件> scripts/beta-keys.sh add beta-1 --out <文件>   # 
 | 查看 | `list`：标签、创建、过期、状态，不显示密钥 |
 | 吊销 | `revoke <标签>`；KV 全球生效要一分钟左右，已发出的下载链接最多再用 10 分钟 |
 | 换掉所有密钥 | `init --rotate` 换 `BETA_SECRET`，旧密钥全部失效（通道令牌不受影响），再 `add` 新的 |
-| 通道令牌 | `channel-add <标签>` / `channel-list` / `channel-revoke <标签>`。换令牌：新令牌另存一个文件，`BETA_TOKEN_FILE=<新文件> … channel-add app-2`，之后的包用新令牌（`DSH_BETA_TOKEN_FILE=<新文件> tooling/build-apk.sh`）；等旧包的人都升级了再吊销 `app-1`，否则他们就收不到更新了 |
+| 通道令牌 | `channel-add <标签>` / `channel-list` / `channel-revoke <标签>`。换令牌：新令牌另存一个文件，`BETA_TOKEN_FILE=<新文件> … channel-add app-2`，之后的包用新令牌（`DSH_BETA_TOKEN_FILE=<新文件> tooling/build-apk.sh --beta`）；等旧包的人都升级了再吊销 `app-1`，否则他们就收不到更新了 |
 
 **回滚**：把上一版的清单重新设为最新，新版文件留着不影响（在 `services/share-worker` 下，环境变量 `CLOUDFLARE_API_TOKEN` 取自 token 文件，`CLOUDFLARE_ACCOUNT_ID` 取自 `~/keys/dshgo-cloudflare-account-id`）。公开下载桶、GitHub 和香港桶见「发版到三条线路」的回滚表。
 
@@ -442,7 +442,7 @@ App 的签名预检认 lineage：新包的签名历史里含已装版本的签�
 | 部分 | 内容 |
 |---|---|
 | 头（80 字节） | 8 字节 `DSHDLT01` · 32 字节旧 APK 的 SHA-256 · 32 字节新 APK 的 SHA-256 · u64 新 APK 长度 |
-| `0x01` COPY | u64 旧 APK 里的偏移 · u64 长度：照抄旧 APK 的这一段 |
+| `0x01` COPY | u64 旧 APK 里的偏移 · u64 长度：复制旧 APK 的这一段 |
 | `0x02` DATA | u64 长度 · 这么多字节：原样写出 |
 | `0x00` END | 结束；写出的必须正好是头里的长度，SHA-256 也要对上 |
 
@@ -475,6 +475,7 @@ App 这边（`app/lib/update/delta.dart`、`app/lib/state/update_state.dart`）�
 | `DSH_UPDATE_FEED=https://…/update.json` | 只换要问的清单，下载仍先试自有站；空串 = 不问清单 |
 | `DSH_UPDATE_MIRRORS=a,b` | 换掉公共加速镜像列表（前缀 + 完整 GitHub 地址）；空串 = 不用 |
 | `DSH_BETA_CHANNEL_ORIGIN` | 换内测通道的域名 |
+| `DSH_WORKSHOP_ORIGIN=https://…` | 换创意工坊的部署，默认 `https://go.dshtui.com`；空串 = 这个包不带工坊入口 |
 
 公共镜像要定期确认还活着，失效的直接从列表删。
 

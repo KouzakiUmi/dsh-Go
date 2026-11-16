@@ -21,7 +21,6 @@ import org.junit.Test
 class BackgroundDisplayTest {
     @Test fun inputWaitingForChannelCapacityIsFencedByPauseStopAndSealAtAdmission() {
         val display = BackgroundDisplay(
-            journal = BackgroundResourceJournal({ null }, { true }).apply { load() },
             mayUse = { true },
             admitUse = { action -> action(); true },
             channelProvider = { error("the test owns the actual channel admission") },
@@ -190,12 +189,10 @@ class BackgroundDisplayTest {
 
     private fun withLastElement(): BackgroundDisplay {
         val display = BackgroundDisplay(
-            journal = BackgroundResourceJournal({ null }, { true }).apply { load() },
             mayUse = { true },
             admitUse = { action -> action(); true },
             channelProvider = { error("response validation must not start a connection") },
         )
-        BackgroundDisplay::class.java.getDeclaredField("targetReady").apply { isAccessible = true; setBoolean(display, true) }
         BackgroundDisplay::class.java.getDeclaredField("lastScreenId").apply {
             isAccessible = true
             set(display, "b7")
@@ -209,12 +206,10 @@ class BackgroundDisplayTest {
 
     @Test fun onlyBackIsSentToTheBackgroundScreen() {
         val display = BackgroundDisplay(
-            journal = BackgroundResourceJournal({ null }, { true }).apply { load() },
             mayUse = { true },
             admitUse = { action -> action(); true },
             channelProvider = { error("a refused key must not reach the privileged channel") },
         )
-        BackgroundDisplay::class.java.getDeclaredField("targetReady").apply { isAccessible = true; setBoolean(display, true) }
         // An app is open on the background screen (set directly: opening one needs the channel).
         BackgroundDisplay::class.java.getDeclaredField("currentTarget").apply {
             isAccessible = true

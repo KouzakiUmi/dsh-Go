@@ -53,32 +53,26 @@ class NotificationGate(
     override fun confirm(request: ConfirmRequest): Decision {
         PhoneRegistry.promptGate?.let { return it.confirm(request) }
         if (!available()) return Decision.UNAVAILABLE
-        // Without the unified presenter, a visual request can only authorize this step;
-        // its three slots must not silently remove the one-shot alternative.
-        // Three buttons fit a heads-up: 本任务免确认 makes "allow" waive the rest of the task.
-        val allow = when {
-            request.visualScope != null -> AppStrings.get(app, R.string.overlay_allow_once)
-            request.offerTaskWaiver -> AppStrings.get(app, R.string.overlay_allow_task_no_ask)
-            request.firstInApp -> AppStrings.get(app, R.string.overlay_allow_task)
-            else -> AppStrings.get(app, R.string.overlay_allow_once)
+        // A heads-up fits three answers: 允许一次 / 本轮允许 / 取消. A visual scope only ever
+        // authorizes one step, so it gets the two-answer form instead of a 本轮 grant.
+        val round = request.allowRound && request.visualScope == null
+        val buttons = buildList {
+            add(AppStrings.get(app, R.string.overlay_allow_once) to "allow")
+            if (round) add(AppStrings.get(app, R.string.overlay_allow_round) to "round")
+            add(AppStrings.get(app, R.string.overlay_decline) to "deny")
         }
         val title = if (request.firstInApp) AppStrings.get(app, R.string.overlay_open_app, request.appLabel ?: AppStrings.get(app, R.string.overlay_this_app)) else AppStrings.get(app, R.string.overlay_confirm_title)
         val choice = ask(
             title = title,
             text = request.sentence,
-            buttons = listOf(allow to "allow", AppStrings.get(app, R.string.overlay_decline) to "deny", AppStrings.get(app, R.string.overlay_stop) to "stop"),
+            buttons = buttons,
             timeoutMs = request.timeoutMs.coerceIn(5_000, 120_000),
             dismissed = "deny",
             channel = CHANNEL_CONFIRM,
         )
         return when (choice) {
-            "allow" -> when {
-                request.visualScope != null -> Decision.ALLOW_ONCE
-                request.offerTaskWaiver -> Decision.ALLOW_ALL_FOR_TASK
-                request.firstInApp -> Decision.ALLOW_APP_FOR_TASK
-                else -> Decision.ALLOW_ONCE
-            }
-            "stop" -> Decision.STOP
+            "allow" -> Decision.ALLOW_ONCE
+            "round" -> Decision.ALLOW_APP_FOR_TASK
             else -> Decision.DENY
         }
     }
@@ -109,6 +103,20 @@ class NotificationGate(
     override fun status(text: String?) = onStatus(text) { update -> update(); true }
 
     override fun status(text: String?, ifCurrent: (() -> Unit) -> Boolean) = onStatus(text, ifCurrent)
+
+    /** Announce an overlay/app prompt without duplicating its buttons or exposing request text. */
+    fun showWaiting(p: PromptPresentation) = p.showNotice {
+        if (!available()) return@showNotice null
+        val id = ids.incrementAndGet()
+        runCatching {
+            nm.notify(TAG, id, builder(CHANNEL_CONFIRM).setSmallIcon(R.drawable.ic_stat_dsh)
+                .setContentTitle(AppStrings.APP_NAME)
+                .setContentText(PhonePromptUi.title(app, p.ticket.content))
+                .setCategory(Notification.CATEGORY_REMINDER).setVisibility(Notification.VISIBILITY_PRIVATE)
+                .setOngoing(true).setTimeoutAfter(p.ticket.remainingMs).build())
+            ({ runCatching { nm.cancel(TAG, id) }; Unit })
+        }.getOrNull()
+    }
 
     /** Non-blocking presentation for the shared arbiter. Open uses an Activity PendingIntent. */
     override fun showPrompt(presentation: PromptPresentation): (() -> Unit)? {
