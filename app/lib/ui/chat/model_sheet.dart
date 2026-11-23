@@ -1085,6 +1085,50 @@ class _ModelGrid extends StatelessWidget {
       selected: selected?.id == model.id && selected?.provider == model.provider,
       onTap: onPick == null ? null : () => onPick!(model),
     );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Two columns while every name fits its card in two lines; a longer
+        // one (a channel's own model name, a price tag after it) gets the
+        // whole row, the group in one column.
+        if (!_namesFit(context, (constraints.maxWidth - gap) / 2)) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < models.length; i++) ...[if (i > 0) const SizedBox(height: gap), card(models[i])],
+            ],
+          );
+        }
+        return _pairs(card);
+      },
+    );
+  }
+
+  /// Every name in two lines on a card [cardWidth] wide.
+  bool _namesFit(BuildContext context, double cardWidth) {
+    final room = cardWidth - 2 * (_ModelCard.horizontalPadding + _ModelCard.border);
+    final painter = TextPainter(
+      maxLines: 2,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    );
+    try {
+      // 卡面没有勾选圈,整行宽度都给名字;按选中态的加粗量,两列时都不截断。
+      var style = _ModelCard.nameStyle(Theme.of(context), selected: true);
+      // As [Text] draws it under the system's bold text.
+      if (MediaQuery.boldTextOf(context)) style = style?.merge(const TextStyle(fontWeight: FontWeight.bold));
+      for (final model in models) {
+        painter.text = TextSpan(text: shortModelName(model.name), style: style);
+        painter.layout(maxWidth: room);
+        if (painter.didExceedMaxLines) return false;
+      }
+      return true;
+    } finally {
+      painter.dispose();
+    }
+  }
+
+  Widget _pairs(Widget Function(ModelInfo) card) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -1120,6 +1164,14 @@ class _ModelCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   static const radius = BorderRadius.all(Radius.circular(AppShape.lg));
+  static const horizontalPadding = 14.0;
+  static const padding = EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 12);
+  static const border = 1.5;
+
+  static TextStyle? nameStyle(ThemeData theme, {bool selected = false}) => theme.textTheme.titleSmall?.copyWith(
+    height: 1.3,
+    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1146,7 +1198,7 @@ class _ModelCard extends StatelessWidget {
           child: AnimatedContainer(
             duration: duration,
             curve: AppMotion.std,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: _ModelCard.padding,
             decoration: ShapeDecoration(
               color: selected
                   ? colors.primary.withValues(alpha: dark ? 0.18 : 0.1)
@@ -1157,7 +1209,7 @@ class _ModelCard extends StatelessWidget {
                   color: selected
                       ? colors.primary.withValues(alpha: dark ? 0.7 : 0.55)
                       : colors.primary.withValues(alpha: 0),
-                  width: 1.5,
+                  width: border,
                 ),
               ),
             ),
@@ -1172,10 +1224,7 @@ class _ModelCard extends StatelessWidget {
                   name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    height: 1.3,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  ),
+                  style: nameStyle(theme, selected: selected),
                 ),
                 if (description != null && description.isNotEmpty) ...[
                   const SizedBox(height: 3),
