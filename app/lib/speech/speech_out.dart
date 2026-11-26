@@ -76,14 +76,14 @@ abstract class SpeechOut {
 /// [pieces] joined as they were said: a space only between two Latin ends.
 String _joined(Iterable<String> pieces) {
   final out = StringBuffer();
+  String? last;
   for (final piece in pieces) {
     if (piece.isEmpty) continue;
-    if (out.isNotEmpty &&
-        _latin.hasMatch(String.fromCharCode(out.toString().codeUnitAt(out.length - 1))) &&
-        _latin.hasMatch(piece[0])) {
+    if (last != null && _latin.hasMatch(last[last.length - 1]) && _latin.hasMatch(piece[0])) {
       out.write(' ');
     }
     out.write(piece);
+    last = piece;
   }
   return out.toString();
 }
@@ -274,7 +274,7 @@ class DeepSeekOut implements SpeechOut {
   int _written = 0;
   int _played = 0;
 
-  /// Each level tick is 40 ms heard ([PcmStream] posts it when that audio plays).
+  /// Each level tick is 40 ms heard (the native PcmStream posts it when that audio plays).
   static const _tickBytes = deepSeekTtsRate * 2 * 40 ~/ 1000;
 
   @override

@@ -16,6 +16,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../companion/companion_call.dart';
+import '../../companion/companion_state.dart' show companionSessionsProvider;
 import '../../companion/companion_voice.dart';
 import '../../companion/companion_voice_source.dart';
 import '../../l10n/l10n.dart';
@@ -61,6 +63,18 @@ Future<void> openChatCall(
   required Future<String?> Function() session,
 }) async {
   final container = ProviderScope.containerOf(context, listen: false);
+  await openVoiceCall(context, title: title, conversation: ChatCallConversation(container, session));
+}
+
+/// Opens a call with [conversation]; [backdrop], when given, is the picture
+/// behind it whatever the call settings say (her room's call shows her).
+Future<void> openVoiceCall(
+  BuildContext context, {
+  required String title,
+  required CallConversation conversation,
+  CallBackdrop? backdrop,
+}) async {
+  final container = ProviderScope.containerOf(context, listen: false);
   container.read(readAloudProvider.notifier).stop();
   await Navigator.of(context).push(
     PageRouteBuilder<void>(
@@ -68,7 +82,7 @@ Future<void> openChatCall(
       fullscreenDialog: true,
       transitionDuration: AppMotion.of(context, const Duration(milliseconds: 520)),
       reverseTransitionDuration: AppMotion.of(context, AppMotion.collapse),
-      pageBuilder: (_, _, _) => VoiceCallPage(title: title, conversation: ChatCallConversation(container, session)),
+      pageBuilder: (_, _, _) => VoiceCallPage(title: title, conversation: conversation, backdrop: backdrop),
       transitionsBuilder: (_, animation, _, child) {
         final curve = CurvedAnimation(parent: animation, curve: AppMotion.enter, reverseCurve: AppMotion.exit);
         // Opening: the page rises out of the dark.
@@ -84,10 +98,13 @@ Future<void> openChatCall(
 }
 
 class VoiceCallPage extends ConsumerStatefulWidget {
-  const VoiceCallPage({super.key, required this.title, required this.conversation});
+  const VoiceCallPage({super.key, required this.title, required this.conversation, this.backdrop});
 
   final String title;
   final CallConversation conversation;
+
+  /// The picture behind the call instead of the one in the call settings.
+  final CallBackdrop? backdrop;
 
   @override
   ConsumerState<VoiceCallPage> createState() => _VoiceCallPageState();
@@ -103,11 +120,15 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   Timer? _leave;
   DateTime? _since;
   CallPhase _shown = CallPhase.starting;
+  void Function(UsageOutcome, {UsageOperation? actual})? _callConnect;
+  void Function(UsageOutcome, {UsageOperation? actual})? _callSession;
 
   // Her, when she is the backdrop.
   final _stage = CompanionStageController();
   bool _stageReady = false;
   bool _stageFailed = false;
+  String? _imageChecked;
+  bool _imageExists = false;
   double _mouthAt = 0;
   bool _mouthOpen = false;
 
@@ -117,6 +138,28 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   /// The system asks for less motion (read each build): the light holds still
   /// and the page comes in without its staggered rise.
   bool _still = false;
+
+  /// What [build] shows of the call. Not the audio levels: the light reads those
+  /// itself each frame, so they alone (some 25 updates a second) leave the page as it is.
+  Object _shows() => (
+    _call.phase,
+    _call.ended,
+    _call.muted,
+    _call.speaker,
+    _call.heard,
+    _call.caption,
+    _call.error,
+    _call.turns.isEmpty,
+    _call.ended == CallEnd.noRecognizer && ref.read(accountProvider).signedIn,
+    switch (widget.conversation) {
+      final ChatCallConversation chat => chat.sessionId,
+      final CompanionCallConversation room => room.sessionId,
+      _ => null,
+    },
+  );
+
+  /// [_shows] as of the last build.
+  Object? _built;
 
   @override
   void initState() {
@@ -133,6 +176,10 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     _call = VoiceCallController(
       audio: audio,
       conversation: widget.conversation,
+      verbatimInput: switch (widget.conversation) {
+        final CompanionCallConversation room => room.fullMode,
+        _ => null,
+      },
       recognizer: () async {
         // The phone's own voice warms up while the call starts, not when changed mid-reply.
         await _settleVoice(warm: _call.phase == CallPhase.starting);
@@ -213,6 +260,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     final pcm = ref.read(streamingPcmCaptureProvider);
     final asr = ref.read(streamingAsrProvider);
     final found = liveWordsModel(ref);
+    _callConnect = ref.read(usageStatsProvider.notifier).beginOperation(UsageOperation.callConnect);
     await _call.start();
     try {
       final chosen = await found;
@@ -237,6 +285,28 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   void _changed() {
     if (!mounted) return;
     final phase = _call.phase;
+    // Listening only proves the microphone opened. A received assistant
+    // reply proves the call's conversation path actually worked.
+    if (_callConnect != null && phase == CallPhase.speaking) {
+      _callConnect?.call(UsageOutcome.ready);
+      _callConnect = null;
+      _callSession = ref.read(usageStatsProvider.notifier).beginOperation(UsageOperation.callSession);
+    }
+    if (phase == CallPhase.ended) {
+      final why = _call.ended;
+      _callConnect?.call(switch (why) {
+        CallEnd.permission || CallEnd.microphone || CallEnd.noRecognizer || CallEnd.failed => UsageOutcome.failed,
+        _ => UsageOutcome.unknown,
+      });
+      _callConnect = null;
+      _callSession?.call(why == CallEnd.failed ? UsageOutcome.failed : UsageOutcome.ready);
+      _callSession = null;
+      // The captions' recognizer (its models) goes with the call, not with the
+      // page: in the background the page only leaves once the app is back.
+      final live = _live;
+      _live = null;
+      unawaited(live?.stop());
+    }
     if (phase != _shown) {
       _arrived(phase);
       _shown = phase;
@@ -257,7 +327,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
         },
       );
     }
-    setState(() {});
+    if (_shows() != _built) setState(() {});
   }
 
   /// A new phase: a touch under the finger, and her mood when she is there.
@@ -322,6 +392,8 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     unawaited(_live?.stop());
     _leave?.cancel();
     _enter.dispose();
+    _callConnect?.call(UsageOutcome.unknown);
+    _callSession?.call(UsageOutcome.unknown);
     _call
       ..removeListener(_changed)
       ..dispose();
@@ -398,10 +470,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
   /// [child] coming in with the page: a fade and a short rise, starting at [from] (0–1).
   Widget _rise(double from, Widget child, {double distance = 18}) {
     if (_still) return child;
-    final curve = CurvedAnimation(
-      parent: _enter,
-      curve: Interval(from, math.min(1, from + 0.5), curve: Curves.easeOutCubic),
-    );
+    final curve = _enter.drive(CurveTween(curve: Interval(from, math.min(1, from + 0.5), curve: Curves.easeOutCubic)));
     return AnimatedBuilder(
       animation: curve,
       builder: (context, child) => Opacity(
@@ -459,6 +528,7 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
 
   @override
   Widget build(BuildContext context) {
+    _built = _shows();
     final l10n = context.l10n;
     final theme = Theme.of(context);
     _still = AppMotion.reduced(context);
@@ -469,15 +539,20 @@ class _VoiceCallPageState extends ConsumerState<VoiceCallPage> with WidgetsBindi
     // frame too: more than HarmonyOS's renderer, or the light mode, can spare.
     final keyBlur = blur && !performance.lightweight && ref.watch(operatingSystemProvider) != 'ohos';
     final ended = _call.phase == CallPhase.ended;
-    final image =
-        settings.backdrop == CallBackdrop.image && settings.image.isNotEmpty && File(settings.image).existsSync()
-        ? settings.image
-        : null;
-    final her = settings.backdrop == CallBackdrop.companion && !_stageFailed;
+    // Looked up once per picture, not on each of the 25 level updates a second.
+    if (settings.image != _imageChecked) {
+      _imageChecked = settings.image;
+      _imageExists = settings.image.isNotEmpty && File(settings.image).existsSync();
+    }
+    final backdrop = widget.backdrop ?? settings.backdrop;
+    final image = backdrop == CallBackdrop.image && _imageExists ? settings.image : null;
+    final her = backdrop == CallBackdrop.companion && !_stageFailed;
     final (status, dots) = _status(l10n);
     final error = _call.error;
+    if (widget.conversation is CompanionCallConversation) ref.watch(companionSessionsProvider);
     final sessionId = switch (widget.conversation) {
       final ChatCallConversation chat => chat.sessionId,
+      final CompanionCallConversation room => room.sessionId,
       _ => null,
     };
     final width = MediaQuery.sizeOf(context).width;
