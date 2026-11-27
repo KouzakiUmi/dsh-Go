@@ -2,29 +2,83 @@
 
 每个版本先中文、后英文。发版时把对应版本的正文（不含版本标题）作为 Release 正文，见 `docs/release.md`。
 
+## 1.4.1 · 2026-11-27
+
+### 中文
+
+#### 改进
+
+- **对话显示解码速度。** 每轮结束的脚注、用量弹层和对话详情新增 `tokens/秒`（输出 token ÷ 解码时长，与单步详情同一口径）；子代理数量按会话谱系统计。
+- **远程主机后台连接。** 连上远程主机后由独立的前台服务维持连接：切到后台或息屏不再受 App 自设时限，也不会顺带启动本机引擎。后台运行页新增「远程连接保活」，可选静音音频和保护性后台定位（默认关闭，定位只用大致位置，不保存也不发送坐标）。
+- **状态显示更清楚。** 远程主机时顶栏把「主机连接」和「会话同步」分开显示，中继连接直接显示实际线路。
+
+#### 修复
+
+- **DS Bot 走中继。** 中继上通过 `dsBot/call`、`dsBot/feed` 访问 DS Bot（需要远端 Host 插件包含 ds-harness-remote#605）；只对可以安全重放的读操作重试，操作不会被执行两次。
+- **更新检查。** 多个官方源并行比较，选出版本最新的一个，旧的内测源不会再挡住 GitHub 正式版；打开 App 和从后台返回都会检查（成功检查后 24 小时内不重复）；检查失败时，已下载的安装包仍可校验并安装。
+- **OpenAI 订阅渠道支持图片。** ChatGPT 订阅渠道按官方声明的模型能力接收图片，可以直接发图。
+- **创意工坊投稿。** 可以投稿主题包，也可以直接选择 ZIP；投稿完成后回到「我的投稿」并看到这一条。
+- **tawcroot 启动。** 显式的 `/dev/shm` 绑定优先，不再被进程内的共享内存模拟覆盖。
+- **鸿蒙。** 修复真机图像打包、Inspector 与生命周期同步。
+
+#### 验证情况
+
+这版改动大多只经过自动测试和编译检查；1.4.1 的测试包在一台 vivo X200 Pro（Android 16）上装过并启动。远程主机后台保活、DS Bot 中继、OpenAI 订阅图片和更新检查需要相应的主机或账号，尚未逐项在真机上验证。
+
+### English
+
+#### Improvements
+
+- **Decoding speed in chats.** The end-of-turn footnote, the usage sheet and the conversation details now show `tokens/sec` (output tokens ÷ decoding time, the same measure as the step details), and the subagent count comes from the conversation lineage.
+- **Remote hosts in the background.** Once connected, a dedicated foreground service keeps the remote link alive: leaving the app or turning the screen off no longer runs into a self-imposed limit, and the local engine is not started. The background page gains remote connection protection — silent audio and protective background location, both off by default; location is coarse only and is never stored or sent.
+- **Clearer status.** With a remote host, the header shows the host link and the conversation sync state separately, and relay connections show the actual route.
+
+#### Fixes
+
+- **DS Bot over the relay.** DS Bot is reached through `dsBot/call` and `dsBot/feed` on relay hosts (the remote host plugin must include ds-harness-remote#605); only reads that are safe to replay are retried, so an action is never executed twice.
+- **Update checks.** Official sources are compared in parallel and the newest release wins, so a stale beta feed can no longer hide the GitHub release; checks run at launch and on returning to the app (at most once per 24 hours after a successful check); when a check fails, an already downloaded package can still be verified and installed.
+- **Images with an OpenAI subscription.** Models on the ChatGPT subscription channel now take images according to their declared capabilities.
+- **Workshop submissions.** Theme packs can be submitted, or a ZIP picked directly; a finished submission lands back in My uploads with the new entry.
+- **tawcroot launch.** Explicit `/dev/shm` binds take precedence instead of being shadowed by per-process shared-memory emulation.
+- **HarmonyOS.** Fixed on-device image packaging, the Inspector and lifecycle sync.
+
+#### Testing
+
+Most of this version has only been checked by automated tests and builds; the 1.4.1 test build was installed and started on a vivo X200 Pro (Android 16). Remote background protection, DS Bot over the relay, images on the OpenAI subscription and update checks need the matching host or account and have not each been verified on a real device.
+
 ## 1.4.0 · 2026-11-25
 
 ### 中文
 
-- **伙伴小屋有了完整模式。** 可以让伙伴在她自己的 DSH 会话里工作，小屋里能看到回复和操作进度。支持多个伙伴、小屋内通话，以及从小屋打开伙伴的主会话。完整模式下清空对话会开启新会话，旧会话留在主机上归档。
-- **Android 手机操控。** 操作进度移到顶部悬浮岛，支持的手机也能用系统灵动岛显示。后台屏小窗可收成贴边小球，按住可以停止。做完一件事后，DSH 可以提议把做法保存成手机技能，经你确认后才会进入试用。也可以把小屋伙伴设为 Android 默认数字助理。
-- **模型和远程连接。** 支持的 Android 本机引擎新增 OpenAI 官方渠道，可以用 ChatGPT 账号授权订阅。远程主机页把账号和网页版入口放到更好找的位置，修复网页版换票和部分远程连接恢复问题。
-- **酒馆和外观。** 补充 SillyTavern 1.19 预设和 SPreset 支持，画布里的酒馆助手可以通过引擎发起生成。创意工坊支持更细的主题包自定义，壁纸支持动图，也可以关闭自动遮罩。
-- **iOS 实时活动。** 支持在锁屏和灵动岛显示实时活动，实际可见位置取决于设备和系统设置。
-- **使用统计。** 关闭详细使用统计后，只保留匿名日活计数。
-- **性能和修复。** 优化长对话与流式回复、宠物贴图缓存、通话字幕和本机运行时的内存占用。修复终端键盘重新唤起和复制粘贴，以及部分设备上的手机操控回读问题。
-- **安装包。** Android 提供 arm64 APK。iOS IPA 和鸿蒙 HAP 为未签名包，需要对应平台签名后安装。
+#### 新功能
+
+- **伙伴小屋有了完整模式。** 伙伴可以在自己的 DSH 会话里工作，小屋里能直接看进度、打电话或打开她的主会话。也可以养多个伙伴，或在 Android 上把伙伴设为系统默认助理。
+- **Android 手机操控有了悬浮岛和手机技能。** 操作进度能显示在屏幕顶部或支持的系统灵动岛里。完成任务后，可以把做法保存成手机技能，下次直接调用。
+- **OpenAI 官方渠道。** 支持的 Android 本机引擎可以用 ChatGPT 账号授权订阅，选用该账号可用的模型。
+- **酒馆和外观。** 补充了 SillyTavern 1.19 预设与 SPreset 支持。创意工坊的主题包可以改更多界面细节，壁纸也支持动图。
+- **iOS 实时活动。** 可以在锁屏和灵动岛查看进度。
+
+#### 修复与改进
+
+- 修复远程主机网页版偶尔打不开、部分连接断开后无法恢复的问题。
+- 修复终端键盘无法重新唤起、复制粘贴异常，以及部分 vivo 手机上手机操控无法读回结果的问题。
+- 减轻长对话和流式回复时的卡顿，修复通话字幕偶尔截断表情的问题。
 
 ### English
 
-- **Full mode in the companion room.** Your companion can work in her own DSH session, with replies and progress visible in the room. You can keep multiple companions, call from the room, and open your companion’s main session. Clearing the chat in full mode starts a fresh session and archives the previous one on the host.
-- **Android phone control.** Progress appears in a floating island at the top of the screen or in the system island on supported phones. The background screen can collapse to an edge bubble that you can hold to stop. After a task, DSH can suggest saving the steps as a phone skill for you to approve before it enters trial use. You can also set the companion as Android’s default digital assistant.
-- **Models and remote connections.** Supported local Android engines now offer an official OpenAI channel that can use a subscription authorized through a ChatGPT account. The Remote Hosts page makes the account and web app easier to find. Web app ticket exchange and some remote reconnection cases are fixed.
-- **Tavern and appearance.** Expanded SillyTavern 1.19 preset and SPreset support. Tavern Helper can start generation from the canvas through the engine. Workshop themes offer more customization, and wallpapers support animation and an option to disable automatic shading.
-- **iOS Live Activities.** Live Activities can appear on the Lock Screen and Dynamic Island, depending on the device and system settings.
-- **Usage statistics.** Turning off detailed usage statistics leaves only an anonymous daily active count.
-- **Performance and fixes.** Reduced work and memory use in long chats, streaming replies, pet textures, call captions, and the local runtime. Fixed reopening the terminal keyboard, copying and pasting, and reading phone control results back on some devices.
-- **Packages.** Android ships an arm64 APK. The iOS IPA and HarmonyOS HAP need their respective platform signatures before installation.
+#### New features
+
+- **Full mode in the companion room.** Your companion can work in her own DSH session. See progress, call her or open her main session from the room. You can keep multiple companions or set your companion as Android’s default assistant.
+- **Floating island and phone skills on Android.** See phone control progress at the top of the screen or in the system island on supported phones. After a task, you can save the steps as a phone skill and use it again later.
+- **Official OpenAI channel.** On supported local Android engines, sign in with a ChatGPT account to authorize your subscription and use the models available to it.
+- **Tavern and appearance.** Expanded SillyTavern 1.19 preset and SPreset support. Workshop themes can customize more of the interface, and wallpapers can be animated.
+- **iOS Live Activities.** See progress on the Lock Screen and Dynamic Island.
+
+#### Fixes and improvements
+
+- Fixed cases where a remote host’s web app failed to open or a dropped connection failed to recover.
+- Fixed reopening the terminal keyboard, copying and pasting, and reading phone control results back on some vivo phones.
+- Reduced stutter in long chats and streaming replies. Fixed call captions occasionally cutting off emoji.
 
 ## 1.3.0 · 2026-11-21
 
